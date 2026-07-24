@@ -59,11 +59,12 @@ singularity-robust-control/
 │   └── derivation.md         # hand-derived FK + Jacobian + singularity analysis
 ├── armsim/                   # flat package (matches synfuel-control convention)
 │   ├── kinematics.py         # ✅ FK, analytical J, manipulability
+│   ├── singularity.py        # ✅ joint/workspace sweeps + closed-form w_max(r)
 │   ├── controllers.py        # ⬜ naive inverse-J, fixed-λ DLS, adaptive-λ DLS
 │   ├── trajectory.py         # ⬜ task-space reference generators
 │   ├── sim.py                # ⬜ RK4 loop, plant-side saturation, logging
-│   ├── viz.py                # ⬜ heatmaps, arm animation, comparison plots
-│   ├── run_heatmap.py        # ⬜ python -m armsim.run_heatmap
+│   ├── viz.py                # ✅ heatmaps + draw_arm; animation lands in Phase 3
+│   ├── run_heatmap.py        # ✅ python -m armsim.run_heatmap
 │   └── run_experiment.py     # ⬜ python -m armsim.run_experiment
 ├── cpp/                      # ⬜ Phase 5: dependency-free real-time port
 │   ├── CMakeLists.txt
@@ -81,11 +82,27 @@ singularity-robust-control/
 `kinematics.py`; write the finite-difference Jacobian test as the safety net for
 everything downstream.
 
-**Phase 2 — Singularity map.** Sweep the workspace and joint space; render `w(q)`
-as heatmaps. Deliverables: a workspace `(x, y)` "danger map" colored by
-manipulability, and a joint-space `(q2, q3)` map with the analytical singular
-locus `q2 ∈ {0, π}` overlaid — computed map matching the analytical curve is the
-first validation.
+**Phase 2 — Singularity map.** ✅ Joint-space `(q2, q3)` map with the singular
+locus overlaid (flat in `q3`, zero on `q2 ∈ {0, π}` — the derivation, visible),
+and a workspace "danger map" of the *best achievable* `w` at each `(x, y)`.
+
+Two things came out of it that the plan hadn't anticipated:
+
+- **The analysis needed its own module.** `singularity.py` holds the sweeps and
+  the closed form; `kinematics.py` stays scalar-config and closed-form so it can
+  port to C++ untouched, and `viz.py` stays pure plotting.
+- **`w_max(x, y)` has a closed form**, which turned the "computed map matches the
+  analytical curve" validation from a picture into a test. Since `q1` only
+  rotates the arm, `w_max` depends on radius alone, and maximising over the
+  feasible wrist radius `r2` gives `w_max(r) = ½·√(((l1+l2)²−r2²)(r2²−(l1−l2)²))`
+  — twice the area of the base–joint2–wrist triangle, by Heron. Worth writing it
+  this way rather than via `√(1−cos²q2)`: that form cancels catastrophically
+  exactly at full reach, reporting `1e-8` where the answer is exactly `0`.
+
+**Result that shapes Phase 3:** the inner **90%** of the reach radius stays above
+`0.9·w_max`. Bad conditioning is a thin outer shell, not a broad region, so the
+Phase 3 trajectory has to deliberately drive at `q2 → 0` to provoke a failure —
+drifting around the workspace will not do it.
 
 **Phase 3 — Naive controller, let it fail.** `qdot = J⁻¹·xdot` via an explicit
 `3x3` inverse (the exact code that ports to C++). Run a trajectory straight
@@ -115,9 +132,14 @@ the SVD is the bottleneck. Only after 1–5 ship.
 - FK spot checks against hand-computed poses. *(Phase 1 ✅)*
 - Analytical `J` vs central-difference `J` at random configs. *(Phase 1 ✅)*
 - `|det(J)| == sqrt(det(JJᵀ))`. *(Phase 1 ✅)*
+- Brute-force sweep never beats the closed-form `w_max(r)`, and converges to it
+  as the sweep refines. *(Phase 2 ✅)*
+- Workspace map is radially symmetric with `q1` swept explicitly — an independent
+  check that nothing but `q2` drives `w`. *(Phase 2 ✅)*
+- Figure pipeline runs headless at coarse resolution. *(Phase 2 ✅)*
 - DLS with `λ = 0` equals the plain inverse away from singularity. *(Phase 4)*
 - DLS output norm bounded as `w → 0` — the actual theorem, as a test. *(Phase 4)*
-- Trajectory generator continuity and endpoint accuracy. *(Phase 2/3)*
+- Trajectory generator continuity and endpoint accuracy. *(Phase 3)*
 - C++/Python parity on the golden trajectory. *(Phase 5)*
 
 ## References
