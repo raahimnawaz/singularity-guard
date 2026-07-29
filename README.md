@@ -1,5 +1,9 @@
 # singularity-robust-control
 
+[![CI](https://github.com/raahimnawaz/singularity-robust-control/actions/workflows/ci.yml/badge.svg)](https://github.com/raahimnawaz/singularity-robust-control/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
+
 Detect an approaching kinematic singularity in a manipulator and switch to a
 damped, singularity-robust velocity control law **before joint velocities blow
 up** — then prove quantitatively that it beats a naive inverse-Jacobian
