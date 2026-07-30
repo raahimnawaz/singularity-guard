@@ -1,5 +1,12 @@
 """armsim -- kinematics and singularity-robust control for a planar 3R arm."""
 
+from armsim.controllers import (
+    AdaptiveDLS,
+    DampedLeastSquares,
+    NaiveInverse,
+    det3,
+    inv3,
+)
 from armsim.kinematics import (
     RobotArm,
     det_jacobian,
@@ -42,6 +49,12 @@ __all__ = [
     "radial_profile_swept",
     "singular_radius",
     "workspace_grid",
+    # control laws (Phases 3-4)
+    "AdaptiveDLS",
+    "DampedLeastSquares",
+    "NaiveInverse",
+    "det3",
+    "inv3",
     # task-space references (Phase 3)
     "Trajectory",
     "quintic",
