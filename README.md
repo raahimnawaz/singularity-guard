@@ -19,15 +19,47 @@ hand-derivable:
 Manipulability is then `w = |det(J)| = l1·l2·|sin(q2)|`, and that scalar is what
 the robust controller uses to schedule its damping.
 
+## The headline result
+
+Same arm, same trajectory, same 3 rad/s actuator limit. A straight task-space line
+driven **exactly through** a singular configuration at the trajectory's peak speed:
+
+| | naive `J⁻¹` | adaptive-λ DLS |
+|---|---:|---:|
+| peak commanded ‖q̇‖∞ | **2,434 rad/s** | **2.8 rad/s** |
+| time saturated | **52.2 %** | **0 %** |
+| position error RMS | **0.740 m** | **0.104 m** |
+| position error max | 1.335 m | 0.217 m |
+
+**875× less peak joint velocity, and it never asks the actuators for something they
+cannot deliver.** The naive controller does not merely overshoot — it drives the arm
+into the singular configuration, saturates for over half the run, and never recovers.
+
+![Naive inverse-Jacobian control failing at a singularity](results/phase3_naive_failure.png)
+
+The honest part is what damping *costs*, which is why the comparison runs three
+scenarios rather than one:
+
+![All three control laws across all three scenarios](results/phase4_comparison.png)
+
+Read the left column: on a trajectory that never approaches a singularity, the
+adaptive law is **bit-identical** to the naive inverse — its schedule returns
+`λ = 0`, so there is nothing to pay. Fixed-λ damping, by contrast, is paying
+1.2 mm of tracking error for protection nothing needed. That property is the
+argument for scheduling damping rather than fixing it, and it is asserted in the
+tests, not just plotted.
+
+Full numbers for all nine runs: [`results/metrics.md`](results/metrics.md).
+
 ## Status
 
 | Phase | What | State |
 |------|------|-------|
 | 1 | Kinematics + analytical Jacobian + manipulability | ✅ done |
 | 2 | Singularity map (workspace / joint-space heatmaps) | ✅ done |
-| 3 | Naive `qdot = J⁻¹·xdot` controller — let it fail | ⬜ next |
-| 4 | Adaptive damped-least-squares controller — the contribution | ⬜ |
-| 5 | Dependency-free C++ port at a 1 kHz control rate | ⬜ |
+| 3 | Naive `qdot = J⁻¹·xdot` controller — let it fail | ✅ done |
+| 4 | Adaptive damped-least-squares controller — the contribution | ✅ done |
+| 5 | Dependency-free C++ port at a 1 kHz control rate | ⬜ next |
 | 6 | *(stretch)* learned manipulability estimator | ⬜ |
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap and
@@ -94,6 +126,44 @@ picture:
 
 ![Sweep versus closed form](results/radial_validation.png)
 
+## The control laws (Phases 3–4)
+
+```
+naive      qdot = J⁻¹ xdot
+fixed      qdot = Jᵀ (J Jᵀ + λ²I)⁻¹ xdot,   λ constant
+adaptive   qdot = Jᵀ (J Jᵀ + λ²I)⁻¹ xdot,   λ² = λ_max²(1 − w/w₀)² for w < w₀, else 0
+```
+
+All three share one explicit 3×3 cofactor inverse — no `np.linalg.solve`, no SVD.
+That is not a micro-optimisation, it is the Phase 5 constraint: this has to become
+dependency-free C++ inside a 1 ms budget, so it stays a fixed instruction sequence
+with no allocation. Note the DLS form inverts `J Jᵀ + λ²I`, which is symmetric
+positive-definite for any `λ > 0` — well-conditioned by construction even when `J`
+itself is exactly singular. Avoiding the ill-conditioned inverse *is* the method.
+
+### Where the damping goes
+
+![Adaptive lambda tracking manipulability](results/phase4_lambda_schedule.png)
+
+`λ` ramps continuously from 0 at the threshold to `λ_max` at the singularity.
+Continuity is not cosmetic: a step in `λ` shows up as a joint-acceleration spike,
+which is what the smoothness metric exists to catch.
+
+### Choosing (w₀, λ_max)
+
+![Trade-off sweep over w0 and lambda_max](results/dls_tradeoff.png)
+
+The defaults (`w₀ = 0.30`, `λ_max = 0.20`) come from this sweep, not from taste —
+it is the cheapest corner of the grid that reaches 0% saturation.
+
+**The surprise here is that the trade-off is weak.** Pushing `w₀` from 0.05 to
+0.30 cuts peak commanded velocity roughly 6× *while tracking error slightly
+improves*. Damping earlier is nearly free, because in this regime the error was
+coming from saturation rather than from the damping. The genuine cost only appears
+at `λ_max = 0.4`, where the error curve turns back upward. A weak trade-off is
+still worth plotting — the interesting claim is that it is weak, and that is only
+credible with the grid shown.
+
 ## What's here
 
 - `armsim/kinematics.py` — forward kinematics, the hand-derived analytical
@@ -101,14 +171,53 @@ picture:
   purpose: this is the exact math that ports to C++ in Phase 5.
 - `armsim/singularity.py` — the joint-space and workspace sweeps, plus the
   closed-form `w_max(r)` they are validated against.
-- `armsim/viz.py`, `armsim/run_heatmap.py` — the figures above and
-  `results/singularity_summary.json`.
+- `armsim/trajectory.py` — task-space references: `through_singularity`,
+  `skim_singularity`, `well_conditioned`.
+- `armsim/controllers.py` — the three laws above, plus `det3`/`inv3`.
+- `armsim/sim.py` — RK4 closed loop, plant-side saturation, and the metric set.
+- `armsim/viz.py`, `armsim/run_heatmap.py` — the Phase 2 figures.
+- `armsim/run_experiment.py` — regenerates every figure and number above.
 - `docs/derivation.md` — the full FK/Jacobian/determinant derivation and
   singularity analysis.
-- `tests/` — the safety net. Two loads bear: one central-differences the forward
-  kinematics against the analytical Jacobian, so every later phase can trust
-  `jacobian()` without re-deriving it; the other pits the brute-force sweep
-  against the closed form, so the maps can't quietly drift from the algebra.
+- `tests/` — 74 tests. The ones that carry weight: central-differencing the
+  analytical Jacobian, holding the brute-force sweep to the closed-form `w_max`,
+  the DLS boundedness theorem `‖q̇‖ ≤ ‖ẋ‖/(2λ)` asserted at an exactly singular
+  configuration, adaptive-equals-naive when well-conditioned, and the headline
+  875× gap pinned as a regression at three different step sizes.
+
+## Reproduce
+
+```bash
+uv run python -m armsim.run_experiment --sweep
+```
+
+Writes every figure, `results/metrics.json`, `results/metrics.md`, and
+`results/golden_through.csv` — the reference trajectory the Phase 5 C++ port will
+be held to.
+
+## One mistake worth recording
+
+The first version of `trajectory.py` built the reference the safe-looking way: pick
+a joint path through `q2 = 0`, then hand the controller its forward-kinematic image,
+`p_ref = FK(q_ref)` with `ṗ_ref = J(q_ref) q̇_ref`. Reachable by construction, and
+provably crossing the singularity.
+
+It also quietly destroyed the experiment. If `ṗ_ref = J q̇_ref` exactly, the
+commanded twist is *always* in the range of `J`, so a bounded joint velocity
+achieving it exists at every instant — namely `q̇_ref` itself. Measured with that
+reference: naive peaked at 1.5 rad/s with zero tracking error, and adaptive DLS
+came out **worse** at 7.4 rad/s. Exactly backwards, and for a real reason.
+
+A singularity is not "the arm is in an awkward pose". It is "certain task
+velocities are no longer achievable". Handing the controller only achievable
+velocities removes the phenomenon while appearing to test it.
+
+The fix is the current design: a straight line in task space, with no feasibility
+guarantee — which is also what a real controller gets, since an operator jogging a
+Cartesian direction does not first check it against the range of the current
+Jacobian. `tests/test_trajectory.py::test_through_commands_an_infeasible_twist_at_the_singularity`
+now projects the commanded twist onto `range(J)` and fails if the unachievable
+residual is under 5%, so this specific mistake cannot come back.
 
 ## Scope
 
