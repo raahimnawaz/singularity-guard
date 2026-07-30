@@ -39,3 +39,32 @@ jobs:
 
       - name: Test
         run: ctest --test-dir cpp/build --output-on-failure
+
+  ros2:
+    runs-on: ubuntu-latest
+    container: ros:jazzy-ros-base
+    steps:
+      # Checked out under src/ so colcon sees a workspace, and so the plugin's
+      # ../cpp/include path to armctl stays valid.
+      - uses: actions/checkout@v4
+        with:
+          path: src/singularity_robust_control
+
+      - name: Install ros2_control dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ros-jazzy-ros2-control \
+            ros-jazzy-ros2-controllers \
+            ros-jazzy-controller-manager \
+            ros-jazzy-realtime-tools \
+            python3-colcon-common-extensions
+
+      # webots_ros2_* are exec_depends only, so the plugin builds without a
+      # Webots install; the simulator is exercised via ros2/Dockerfile, not CI.
+      - name: Build
+        shell: bash
+        run: |
+          . /opt/ros/jazzy/setup.sh
+          colcon build --packages-select armctl_ros2_control \
+            --cmake-args -DCMAKE_BUILD_TYPE=Release

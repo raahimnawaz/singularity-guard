@@ -1,0 +1,43 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 125  # Hz, matches worlds/singularity_arm.wbt's basicTimeStep (8 ms)
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    singularity_controller:
+      type: armctl_ros2_control/SingularityController
+
+singularity_controller:
+  ros__parameters:
+    joints:
+      - joint1
+      - joint2
+      - joint3
+
+    # naive | fixed | adaptive -- the same three laws compared throughout
+    # this project (armsim/controllers.py, cpp/include/armctl/controllers.hpp).
+    controller_law: adaptive
+    w0: 0.30
+    lam_max: 0.20
+    fixed_lambda: 0.10
+
+    kp: 5.0
+    qdot_max: 3.0
+
+    # armctl::RobotArm{1,1,1} -- must match worlds/singularity_arm.wbt's link
+    # lengths and urdf/singularity_arm.urdf's joint origins.
+    l1: 1.0
+    l2: 1.0
+    l3: 1.0
+
+    # Loops the through-singularity crossing continuously rather than running
+    # it once and holding -- convenient for a live demo, not something the
+    # offline armsim/cpp runs do.
+    loop: true
+
+    trajectory:
+      q1: 0.3
+      q3: 1.5707963
+      q2_amplitude: 0.8
+      duration: 2.0

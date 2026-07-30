@@ -49,6 +49,24 @@ adaptive law is **bit-identical** to the naive inverse — its schedule returns
 argument for scheduling damping rather than fixing it, and it is asserted in the
 tests, not just plotted.
 
+**And the part that cuts against the adaptive law.** Once you are *actually*
+crossing a singularity, scheduling does not buy better protection than a
+well-chosen constant `λ` — it is slightly worse:
+
+| through-crossing | peak ‖q̇‖∞ | pos RMS | accel RMS |
+|---|---:|---:|---:|
+| fixed-λ (0.1) | **1.86** | **0.1025 m** | **2.5** |
+| adaptive-λ | 2.78 | 0.1036 m | 4.2 |
+
+Fixed-λ wins on every column of the headline scenario. So the case for
+scheduling is *not* "it handles singularities better" — it is narrower and
+should be stated as such: **scheduling costs nothing when damping isn't needed,
+which is most of the workspace** (the inner 90% of the reach radius, per Phase
+2), while a constant `λ` taxes every trajectory whether or not it goes anywhere
+near a singular configuration. Adaptive-λ buys selectivity, not protection. If
+you know in advance that every trajectory crosses a singularity, use fixed-λ and
+skip the schedule.
+
 Full numbers for all nine runs: [`results/metrics.md`](results/metrics.md).
 
 ## Status
@@ -61,6 +79,7 @@ Full numbers for all nine runs: [`results/metrics.md`](results/metrics.md).
 | 4 | Adaptive damped-least-squares controller — the contribution | ✅ done |
 | 5 | Dependency-free C++ port at a 1 kHz control rate | ✅ done |
 | 6 | *(stretch)* learned manipulability estimator | ⬜ |
+| 7 | `ros2_control` plugin driving a Webots dynamic plant | 🚧 builds; bring-up WIP |
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap and
 [`docs/derivation.md`](docs/derivation.md) for the hand derivation.
@@ -202,6 +221,49 @@ this result is the *baseline* a learned or SVD-based estimator would have to
 beat on a high-DOF arm, not evidence that this particular 3×3 solve was ever
 at risk of missing a 1 ms budget.
 
+## On a real dynamic plant (Phase 7)
+
+Everything above runs against a **kinematic** plant: `armsim/sim.py` integrates
+`q̇` straight from the control law, with saturation applied plant-side. No mass,
+no inertia, no torque limit, no actuator bandwidth. Those numbers describe a
+*control law*, not a robot.
+
+`ros2/` closes that gap. The same `armctl` headers — unmodified, included from
+`../cpp/include` rather than copied — are wrapped in a `ros2_control` controller
+plugin and pointed at a Webots model of the same 3R arm:
+
+```bash
+docker build -f ros2/Dockerfile -t singularity-arm-webots .
+docker run --rm singularity-arm-webots                 # headless, Xvfb
+docker run --rm -e HEADLESS=0 -e DISPLAY=$DISPLAY \
+  -v /tmp/.X11-unix:/tmp/.X11-unix singularity-arm-webots   # with the GUI
+```
+
+The image bakes ROS 2 Jazzy, Webots R2025a, and the built workspace, so the demo
+needs no network access and no local ROS install.
+
+The controller is a `controller_interface::ControllerInterface` claiming
+`<joint>/velocity` command interfaces and `<joint>/position` state interfaces,
+with the naive / fixed-λ / adaptive-λ choice exposed as a `controller_law`
+parameter — so the three-way comparison is a config change, not a rebuild. It
+publishes `~/manipulability` and `~/damping` through `RealtimePublisher`, which
+is what makes `w` and `λ` observable live rather than only in post-processing.
+
+**Nothing about dynamics is claimed yet, and bring-up is not finished.** What
+works: the plugin builds clean on Jazzy under `-Wall -Wextra -Wpedantic`, the
+world loads in Webots R2025a with no errors or warnings, the arm renders, the
+driver attaches its extern controller, and `controller_manager` activates the
+hardware. What does not: controller *spawning* times out, because `/clock` is
+never published and a sim-time `controller_manager` cannot step without it. So
+the arm has not yet moved under this controller, `results/metrics.md` remains a
+purely kinematic result, and this section describes apparatus rather than
+findings. The prediction being tested — and it is written down
+in [`docs/PLAN.md`](docs/PLAN.md) so it can be wrong — is that dynamics will
+*shrink* the naive controller's 2,434 rad/s headline (real motors cannot slew
+that fast; divergence turns into tracking failure instead) while *strengthening*
+the smoothness case for adaptive-λ (torque limits punish acceleration spikes the
+kinematic model treats as free).
+
 ## What's here
 
 - `armsim/kinematics.py` — forward kinematics, the hand-derived analytical
@@ -221,6 +283,11 @@ at risk of missing a 1 ms budget.
   writes the golden-format CSV, and reports control-law latency.
 - `cpp/tests/parity_check.py` — holds the C++ output to
   `results/golden_through.csv` within `1e-9`, wired into `ctest`.
+- `ros2/` — the `ros2_control` plugin (Phase 7). `src/` + `include/` are the
+  `ControllerInterface` wrapper and the runtime law switch; `urdf/` and
+  `worlds/` are the same 3R arm as `RobotArm{1,1,1}`; `config/controllers.yaml`
+  carries the gains at 125 Hz; `launch/webots_sim.launch.py` brings up Webots,
+  the driver, and the spawners; `Dockerfile` makes the whole thing one command.
 - `docs/derivation.md` — the full FK/Jacobian/determinant derivation and
   singularity analysis.
 - `tests/` — 74 tests. The ones that carry weight: central-differencing the

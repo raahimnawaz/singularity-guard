@@ -71,9 +71,16 @@ singularity-robust-control/
 │   ├── include/armctl/       # header-only mat3 / kinematics / controllers / dls
 │   ├── src/main.cpp          # timed 1 kHz loop, CSV out
 │   └── tests/                # ✅ parity vs Python golden CSV (parity_check.py)
+├── ros2/                     # 🚧 Phase 7: ros2_control plugin + Webots plant
+│   ├── CMakeLists.txt        # ament; armctl via ../cpp/include, not copied
+│   ├── src/, include/        # ControllerInterface wrapper, runtime law switch
+│   ├── urdf/, worlds/        # 3R arm matching RobotArm{1,1,1} exactly
+│   ├── config/               # controller_manager + gains, 125 Hz
+│   ├── launch/               # WebotsLauncher + WebotsController + spawners
+│   └── Dockerfile            # Jazzy + Webots R2025a + prebuilt ws, one run
 ├── tests/                    # ✅ pytest
 ├── results/                  # committed figures + metrics.json (curated, small)
-└── .github/workflows/ci.yml  # ✅ lint + test, plus a cmake + ctest job for cpp/
+└── .github/workflows/ci.yml  # ✅ lint + test, cmake + ctest, colcon build
 ```
 
 ## Phase-by-phase
@@ -187,6 +194,75 @@ Phase 5 is actually trying to demonstrate.
 `(q2, q3) → w`. Honest framing: for a `3x3` `J`, computing the determinant is
 already nanoseconds, so the pitch is a proof-of-concept for high-DOF arms where
 the SVD is the bottleneck. Only after 1–5 ship.
+
+**Phase 7 — ros2_control plugin on a dynamic plant.** 🚧 Started before Phase 6,
+which is still open. `ros2/` wraps `armctl` (unmodified, included from
+`../cpp/include`) in a `controller_interface::ControllerInterface` plugin that
+claims `<joint>/velocity` command interfaces and `<joint>/position` state
+interfaces, and runs the same three laws selected at runtime by a
+`controller_law` parameter. Webots R2025a supplies the plant via
+`webots_ros2_control::Ros2ControlSystem`; `ros2/Dockerfile` bakes ROS 2 Jazzy,
+the Webots binary, and the built workspace into one image so the demo is a
+single `docker run` with no network access at build time.
+
+*One environment bug worth writing down, because the symptom points nowhere
+near the cause.* On Docker Desktop for Windows the launch file died with
+`FileNotFoundError: 'wslpath'`, which surfaces downstream as
+`controller_manager` never appearing — so the visible failure is "the
+controller never loads", which reads like a plugin or pluginlib problem and is
+not one. `webots_ros2_driver.utils.is_wsl()` decides it is under WSL from the
+kernel string alone (`'microsoft-standard' in uname().release`). Docker Desktop
+runs its Linux VM *on top of* WSL2, so every container inherits a
+`...-microsoft-standard-WSL2` kernel and the check fires inside a plain Linux
+container, which then calls a Windows-side tool that isn't there. The Dockerfile
+additionally requires `wslpath` to exist on `PATH`, which makes the detection
+correct rather than merely switched off, and asserts the result at build time.
+Native Linux hosts never saw this.
+
+*Why this phase exists at all.* Phases 3–5 all run against the same **kinematic**
+plant: `armsim/sim.py` integrates `q̇` straight from the control law and applies
+saturation plant-side. That model has no mass, no inertia, no torque limit, and
+no actuator bandwidth. Every number in `results/metrics.md` is therefore a
+statement about the *control law*, not about a robot. Webots supplies real
+rigid-body dynamics at an 8 ms timestep, which makes the obvious question
+answerable: **which of those conclusions survive contact with dynamics?**
+
+*The specific prediction to test* (worth writing down before measuring, so it
+can be wrong): the naive `J⁻¹` failure should look *less* dramatic than 2,434
+rad/s, because a real motor physically cannot slew that fast and Webots will
+clamp what the kinematic model let diverge — the divergence becomes a tracking
+failure rather than an absurd velocity command. Conversely adaptive-λ's
+smoothness advantage should look *better*, because torque limits penalise the
+joint-acceleration spikes the kinematic model treats as free. If both hold, the
+honest summary is that the kinematic study overstated the peak-velocity
+headline and understated the smoothness argument.
+
+*Three world-file bugs, none of which Webots treats as fatal.* `RotationalMotor`
+has no `axis` field — the joint axis belongs to `HingeJointParameters` — so
+three `axis 0 0 1` lines were parsed, rejected, and skipped with an error while
+the world still loaded. Every `Solid` was also inheriting the default name
+`solid`, which collides across siblings. And the hand-written `Viewpoint` sat at
+`(1.2, -3.3, 2.2)` pointing essentially straight down at bare floor with the arm
+~3 m outside the frame, so the sim looked empty when it was not. The viewpoint
+is now top-down, which for a *planar* arm is the correct view rather than a
+stylistic one: the configuration is undistorted and `q2 → 0` collinearity is
+directly readable. The world now loads with zero errors and zero warnings.
+
+*How far bring-up actually gets.* Verified: the package compiles clean on Jazzy
+under `-Wall -Wextra -Wpedantic`; the world loads without complaint in Webots
+R2025a; the arm renders; `webots_ros2_driver` attaches its extern controller to
+it; and `controller_manager` initialises and activates the `singularity_arm`
+hardware component. Not yet working: controller **spawning**. Both spawners time
+out calling `/controller_manager/load_controller`, because `/clock` is never
+published — `controller_manager` is configured for sim time and is stepped by
+the simulator, so with no clock it accepts service requests and never answers
+them. The `Ros2Supervisor` that publishes `/clock` starts but does not attach,
+while the arm's own extern controller does. That asymmetry is the open thread.
+
+*Then the actual deliverable.* Once controllers spawn, the three-law comparison
+against `results/metrics.md` has to be recorded on the Webots plant. That
+comparison is the point of this phase; the plugin is only apparatus. Until it
+lands, nothing in this repo claims a dynamics result.
 
 ## Testing plan
 

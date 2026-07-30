@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>armctl_ros2_control</name>
+  <version>0.1.0</version>
+  <description>
+    ros2_control controller plugin wrapping armctl (the Phase 5 header-only
+    singularity-robust DLS controller) so it can drive a real dynamic plant --
+    Webots today, real hardware later with no controller code changes.
+  </description>
+  <maintainer email="raahimtnawaz@gmail.com">Raahim Nawaz</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>controller_interface</depend>
+  <depend>hardware_interface</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>realtime_tools</depend>
+  <depend>std_msgs</depend>
+  <depend>pluginlib</depend>
+
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>webots_ros2_driver</exec_depend>
+  <exec_depend>webots_ros2_control</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

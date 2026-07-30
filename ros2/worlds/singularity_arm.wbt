@@ -1,0 +1,183 @@
+#VRML_SIM R2025a utf8
+
+# Planar 3R arm matching armctl::RobotArm{1,1,1} exactly: three unit-length
+# links, all hinges about +Z, so this world's kinematics are the same arm
+# every armsim/cpp figure and number in this repo is about -- Webots just
+# adds real dynamics (mass, inertia, gravity torque) that the kinematic
+# Python/C++ sims never had to face.
+#
+# controller "<extern>": the controller process is attached externally by
+# ros2 launch (WebotsController), not compiled into Webots. Device names
+# (joint1/joint2/joint3, matching PositionSensors) must match the joint names
+# in urdf/singularity_arm.urdf's <ros2_control> block exactly -- that name is
+# how webots_ros2_control::Ros2ControlSystem finds each device.
+
+WorldInfo {
+  info [ "Planar 3R singularity-robust-control arm." ]
+  title "singularity_arm"
+  basicTimeStep 8
+}
+# Top-down, looking straight down -Z at the XY plane the arm lives in. For a
+# planar arm this is the honest view rather than a stylistic one: the whole
+# configuration is visible undistorted, and the singularity -- links 1 and 2
+# going collinear, q2 -> 0 -- is directly readable off the screen instead of
+# being hidden by perspective foreshortening. Centred on x = 1.5, the middle
+# of the arm's 0..3 m reach.
+Viewpoint {
+  orientation 0 0 1 0
+  position 1.5 0 7
+}
+Background {
+  skyColor [ 0.7 0.75 0.8 ]
+}
+DirectionalLight {
+  direction 0.3 0.3 -1
+  intensity 1.2
+}
+
+DEF SINGULARITY_ARM Robot {
+  name "singularity_arm"
+  controller "<extern>"
+  controllerArgs [ "" ]
+  children [
+    Solid {
+      name "base"
+      children [
+        Shape {
+          appearance PBRAppearance { baseColor 0.25 0.25 0.28 roughness 0.6 metalness 0.2 }
+          geometry Cylinder { radius 0.08 height 0.06 }
+        }
+      ]
+      boundingObject Cylinder { radius 0.08 height 0.06 }
+    }
+    HingeJoint {
+      jointParameters HingeJointParameters {
+        position 0.3
+        axis 0 0 1
+        anchor 0 0 0.05
+      }
+      device [
+        RotationalMotor {
+          name "joint1"
+          maxVelocity 20
+          minPosition -1000
+          maxPosition 1000
+          maxTorque 200
+        }
+        PositionSensor {
+          name "joint1_sensor"
+        }
+      ]
+      endPoint Solid {
+        name "link1"
+        translation 0 0 0.05
+        rotation 0 0 1 0.3
+        children [
+          Transform {
+            translation 0.5 0 0
+            children [
+              Shape {
+                appearance PBRAppearance { baseColor 0.55 0.57 0.62 roughness 0.5 metalness 0.4 }
+                geometry Box { size 1.0 0.08 0.08 }
+              }
+            ]
+          }
+          HingeJoint {
+            jointParameters HingeJointParameters {
+              position 0.8
+              axis 0 0 1
+              anchor 1 0 0
+            }
+            device [
+              RotationalMotor {
+                name "joint2"
+                maxVelocity 20
+                minPosition -1000
+                maxPosition 1000
+                maxTorque 200
+              }
+              PositionSensor {
+                name "joint2_sensor"
+              }
+            ]
+            endPoint Solid {
+              name "link2"
+              translation 1 0 0
+              rotation 0 0 1 0.8
+              children [
+                Transform {
+                  translation 0.5 0 0
+                  children [
+                    Shape {
+                      appearance PBRAppearance { baseColor 0.55 0.57 0.62 roughness 0.5 metalness 0.4 }
+                      geometry Box { size 1.0 0.08 0.08 }
+                    }
+                  ]
+                }
+                HingeJoint {
+                  jointParameters HingeJointParameters {
+                    position 1.5707963
+                    axis 0 0 1
+                    anchor 1 0 0
+                  }
+                  device [
+                    RotationalMotor {
+                      name "joint3"
+                      maxVelocity 20
+                      minPosition -1000
+                      maxPosition 1000
+                      maxTorque 200
+                    }
+                    PositionSensor {
+                      name "joint3_sensor"
+                    }
+                  ]
+                  endPoint Solid {
+                    name "link3"
+                    translation 1 0 0
+                    rotation 0 0 1 1.5707963
+                    children [
+                      Transform {
+                        translation 0.5 0 0
+                        children [
+                          Shape {
+                            appearance PBRAppearance { baseColor 0.75 0.35 0.2 roughness 0.5 metalness 0.4 }
+                            geometry Box { size 1.0 0.06 0.06 }
+                          }
+                        ]
+                      }
+                    ]
+                    boundingObject Transform {
+                      translation 0.5 0 0
+                      children [ Box { size 1.0 0.06 0.06 } ]
+                    }
+                    physics Physics {
+                      density -1
+                      mass 0.8
+                    }
+                  }
+                }
+              ]
+              boundingObject Transform {
+                translation 0.5 0 0
+                children [ Box { size 1.0 0.08 0.08 } ]
+              }
+              physics Physics {
+                density -1
+                mass 1.0
+              }
+            }
+          }
+        ]
+        boundingObject Transform {
+          translation 0.5 0 0
+          children [ Box { size 1.0 0.08 0.08 } ]
+        }
+        physics Physics {
+          density -1
+          mass 1.0
+        }
+      }
+    }
+  ]
+}

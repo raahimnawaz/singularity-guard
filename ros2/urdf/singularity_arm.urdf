@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<!--
+  Planar 3R arm matching armctl::RobotArm{1,1,1} exactly: three 1 m links,
+  every joint about +Z. Link/joint names and lengths here must stay in sync
+  with worlds/singularity_arm.wbt (device names) and with the controller's
+  l1/l2/l3 parameters in config/controllers.yaml (default 1.0 each) -- the
+  whole point is that this is the same arm every armsim/cpp result is about.
+-->
+<robot name="singularity_arm">
+  <link name="base_link">
+    <visual>
+      <geometry><cylinder radius="0.08" length="0.06"/></geometry>
+    </visual>
+  </link>
+
+  <link name="link1">
+    <visual>
+      <origin xyz="0.5 0 0" rpy="0 1.5707963 0"/>
+      <geometry><cylinder radius="0.04" length="1.0"/></geometry>
+    </visual>
+  </link>
+  <joint name="joint1" type="continuous">
+    <parent link="base_link"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="link2">
+    <visual>
+      <origin xyz="0.5 0 0" rpy="0 1.5707963 0"/>
+      <geometry><cylinder radius="0.04" length="1.0"/></geometry>
+    </visual>
+  </link>
+  <joint name="joint2" type="continuous">
+    <parent link="link1"/>
+    <child link="link2"/>
+    <origin xyz="1 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="link3">
+    <visual>
+      <origin xyz="0.5 0 0" rpy="0 1.5707963 0"/>
+      <geometry><cylinder radius="0.03" length="1.0"/></geometry>
+    </visual>
+  </link>
+  <joint name="joint3" type="continuous">
+    <parent link="link2"/>
+    <child link="link3"/>
+    <origin xyz="1 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="tool0"/>
+  <joint name="tool_joint" type="fixed">
+    <parent link="link3"/>
+    <child link="tool0"/>
+    <origin xyz="1 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <webots>
+    <plugin type="webots_ros2_control::Ros2Control" />
+  </webots>
+
+  <ros2_control name="singularity_arm" type="system">
+    <hardware>
+      <plugin>webots_ros2_control::Ros2ControlSystem</plugin>
+    </hardware>
+    <joint name="joint1">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="joint2">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="joint3">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+</robot>
