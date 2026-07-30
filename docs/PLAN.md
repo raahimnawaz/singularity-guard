@@ -104,17 +104,50 @@ Two things came out of it that the plan hadn't anticipated:
 Phase 3 trajectory has to deliberately drive at `q2 → 0` to provoke a failure —
 drifting around the workspace will not do it.
 
-**Phase 3 — Naive controller, let it fail.** `qdot = J⁻¹·xdot` via an explicit
-`3x3` inverse (the exact code that ports to C++). Run a trajectory straight
-through a singular configuration at nonzero commanded speed; log joint
-velocities; show the spike / saturation. Save the run as a golden CSV for the
-C++ parity test.
+**Phase 3 — Naive controller, let it fail.** ✅ `qdot = J⁻¹·xdot` via an explicit
+`3x3` inverse (the exact code that ports to C++). Result: **2,434 rad/s** peak
+command against a 3 rad/s limit, **52.2%** of the run saturated, 0.740 m position
+RMS, and the arm never recovers — it gets stuck at the singular configuration.
+Golden CSV written for the Phase 5 parity test.
 
-**Phase 4 — DLS controller (the contribution).** `qdot = Jᵀ(JJᵀ + λ²I)⁻¹·xdot`,
-fixed-λ first, then adaptive λ. Rerun the identical trajectories. Deliverables:
-overlay plots, the metrics table (README centerpiece), the `(w₀, λ_max)`
-trade-off plot, side-by-side animations. Also test a "skim near, don't cross"
-trajectory — DLS shines there too and it is the more realistic scenario.
+**One thing the plan got wrong, and it mattered.** The plan says only "run a
+trajectory straight through a singular configuration", without saying in which
+space to define it. The first implementation designed it in *joint* space and
+handed the controller the forward-kinematic image, `p_ref = FK(q_ref)` with
+`ṗ_ref = J(q_ref) q̇_ref` — reachable by construction, provably crossing the
+singular locus, and completely inert as an experiment. A twist built that way is
+always in `range(J)`, so a bounded solution exists at every instant and the naive
+controller sails through: it measured 1.5 rad/s peak with zero error, while
+adaptive DLS came out *worse* at 7.4 rad/s.
+
+A singularity is not a pose, it is a set of task velocities that stop being
+achievable. The reference must therefore be a straight line in **task space**,
+with no feasibility guarantee — which is also what a real controller receives.
+`tests/test_trajectory.py` now projects the commanded twist onto `range(J)` and
+fails if the unachievable residual drops below 5%.
+
+**Phase 4 — DLS controller (the contribution).** ✅ Fixed-λ and adaptive-λ, both
+via `qdot = Jᵀ(JJᵀ + λ²I)⁻¹·xdot`. Adaptive defaults `w₀ = 0.30`, `λ_max = 0.20`
+come from the sweep. Three scenarios rather than two — `well_conditioned` was
+added because without it the table only shows what damping *buys* and never what
+it *costs*.
+
+Results: adaptive DLS is bit-identical to naive when well-conditioned (`λ = 0`,
+zero cost), 4.6× more accurate than fixed-λ when skimming, and bounded at 2.8
+rad/s with 0% saturation through the exact crossing.
+
+**Not a clean sweep, and worth saying so:** fixed-λ actually edges adaptive *at*
+the singularity (1.86 vs 2.78 rad/s peak, 0.1025 vs 0.1036 m RMS). Adaptive's
+claim is not dominance — it is being the only law that is free when
+well-conditioned *and* protected when singular.
+
+**Second finding: the trade-off is weak.** Raising `w₀` from 0.05 to 0.30 cuts
+peak velocity ~6× while tracking error slightly *improves*, because the error was
+coming from saturation rather than damping. The real cost only shows up at
+`λ_max = 0.4`. Damping earlier is close to free in this regime.
+
+Still open from the original plan: side-by-side animations (the sim-based video is
+a better use of the effort — see the Webots note below).
 
 **Phase 5 — C++ real-time port.** Header-only fixed-size `Mat3`/`Vec3`, explicit
 `3x3` inverse via cofactors (`JJᵀ + λ²I` is symmetric and well-conditioned by
