@@ -59,7 +59,7 @@ Full numbers for all nine runs: [`results/metrics.md`](results/metrics.md).
 | 2 | Singularity map (workspace / joint-space heatmaps) | ✅ done |
 | 3 | Naive `qdot = J⁻¹·xdot` controller — let it fail | ✅ done |
 | 4 | Adaptive damped-least-squares controller — the contribution | ✅ done |
-| 5 | Dependency-free C++ port at a 1 kHz control rate | ⬜ next |
+| 5 | Dependency-free C++ port at a 1 kHz control rate | ✅ done |
 | 6 | *(stretch)* learned manipulability estimator | ⬜ |
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap and
@@ -164,6 +164,44 @@ at `λ_max = 0.4`, where the error curve turns back upward. A weak trade-off is
 still worth plotting — the interesting claim is that it is weak, and that is only
 credible with the grid shown.
 
+## The C++ port (Phase 5)
+
+```bash
+cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
+cmake --build cpp/build
+cpp/build/armctl_main out.csv     # regenerate + check by eye
+ctest --test-dir cpp/build --output-on-failure   # parity vs the Python golden CSV
+```
+
+`cpp/include/armctl/` is a header-only, dependency-free port of the exact math
+above — `mat3.hpp` (fixed 3×3 arithmetic, the same cofactor `det3`/`inv3`),
+`kinematics.hpp`, `controllers.hpp`, `trajectory.hpp`, and `sim.hpp` (the RK4
+closed loop). `cpp/src/main.cpp` runs the through-singularity / adaptive-DLS
+scenario — the run that produced `results/golden_through.csv` — and
+`cpp/tests/parity_check.py` (stdlib-only, no numpy) holds every field of its
+output to that CSV within `1e-9`.
+
+**Why time `step_control()` alone, not the full RK4 step.** The simulation
+evaluates the control law four times per step because RK4 is a four-stage
+integrator; that is a Python/C++ parity choice (see `armsim/sim.py`), not
+something a real digital controller does. A real 1 kHz loop calls the control
+law exactly once per tick, so that is the one call timed:
+
+| | median | p99 | max | budget | headroom at p99 |
+|---|---:|---:|---:|---:|---:|
+| `step_control()` | ~0.1 µs | ~0.2 µs | low single-digit µs | 1,000 µs (1 kHz) | ~5,000× |
+
+(Numbers from a representative run — `max` is noisy at this timescale, as any
+wall-clock measurement of a sub-microsecond call is; median and p99 are the
+numbers that matter. Run `cpp/build/armctl_main` yourself for a fresh sample.)
+
+That headroom is expected, not a finding — for a `3×3` `J`, a cofactor
+determinant and adjugate inverse are a fixed handful of FLOPs, nanoseconds on
+any modern core. The honest framing (also in `docs/PLAN.md`, Phase 6) is that
+this result is the *baseline* a learned or SVD-based estimator would have to
+beat on a high-DOF arm, not evidence that this particular 3×3 solve was ever
+at risk of missing a 1 ms budget.
+
 ## What's here
 
 - `armsim/kinematics.py` — forward kinematics, the hand-derived analytical
@@ -177,6 +215,12 @@ credible with the grid shown.
 - `armsim/sim.py` — RK4 closed loop, plant-side saturation, and the metric set.
 - `armsim/viz.py`, `armsim/run_heatmap.py` — the Phase 2 figures.
 - `armsim/run_experiment.py` — regenerates every figure and number above.
+- `cpp/include/armctl/` — the header-only C++ port (Phase 5): `mat3.hpp`,
+  `kinematics.hpp`, `controllers.hpp`, `trajectory.hpp`, `sim.hpp`.
+- `cpp/src/main.cpp` — runs the through-singularity/adaptive-DLS scenario,
+  writes the golden-format CSV, and reports control-law latency.
+- `cpp/tests/parity_check.py` — holds the C++ output to
+  `results/golden_through.csv` within `1e-9`, wired into `ctest`.
 - `docs/derivation.md` — the full FK/Jacobian/determinant derivation and
   singularity analysis.
 - `tests/` — 74 tests. The ones that carry weight: central-differencing the

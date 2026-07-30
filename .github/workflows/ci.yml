@@ -25,3 +25,17 @@ jobs:
 
       - name: Test
         run: uv run pytest -q
+
+  cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build cpp/build --config Release
+
+      - name: Test
+        run: ctest --test-dir cpp/build --output-on-failure

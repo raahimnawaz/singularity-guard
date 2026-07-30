@@ -66,14 +66,14 @@ singularity-robust-control/
 │   ├── viz.py                # ✅ heatmaps + draw_arm; animation lands in Phase 3
 │   ├── run_heatmap.py        # ✅ python -m armsim.run_heatmap
 │   └── run_experiment.py     # ⬜ python -m armsim.run_experiment
-├── cpp/                      # ⬜ Phase 5: dependency-free real-time port
+├── cpp/                      # ✅ Phase 5: dependency-free real-time port
 │   ├── CMakeLists.txt
-│   ├── include/armctl/       # header-only mat3 / kinematics / dls
+│   ├── include/armctl/       # header-only mat3 / kinematics / controllers / dls
 │   ├── src/main.cpp          # timed 1 kHz loop, CSV out
-│   └── tests/                # parity vs Python golden CSVs
+│   └── tests/                # ✅ parity vs Python golden CSV (parity_check.py)
 ├── tests/                    # ✅ pytest
 ├── results/                  # committed figures + metrics.json (curated, small)
-└── .github/workflows/ci.yml  # ✅ lint + test (grows with C++ build later)
+└── .github/workflows/ci.yml  # ✅ lint + test, plus a cmake + ctest job for cpp/
 ```
 
 ## Phase-by-phase
@@ -149,11 +149,39 @@ coming from saturation rather than damping. The real cost only shows up at
 Still open from the original plan: side-by-side animations (the sim-based video is
 a better use of the effort — see the Webots note below).
 
-**Phase 5 — C++ real-time port.** Header-only fixed-size `Mat3`/`Vec3`, explicit
+**Phase 5 — C++ real-time port.** ✅ Header-only fixed-size `Mat3`/`Vec3`, explicit
 `3x3` inverse via cofactors (`JJᵀ + λ²I` is symmetric and well-conditioned by
 construction — that is the point of DLS). Measure per-iteration latency with
 `std::chrono`, report median/p99/max, demonstrate headroom vs a 1 ms budget.
 Parity test: C++ vs Python golden CSV within `1e-9`.
+
+Result: `cpp/tests/parity_check.py` holds every field of the through-singularity/
+adaptive-DLS run to `results/golden_through.csv` within `1e-9` — measured max
+abs diff `1.2e-10` across all 2001 rows x 12 columns, an order of magnitude of
+margin from roundoff, not algorithmic drift (both implementations do the same
+cofactor arithmetic in the same order). `step_control()` — the one control-law
+evaluation a real 1 kHz loop repeats per tick, timed in isolation over a
+representative run — measured **~0.1 µs median / ~0.2 µs p99 / low-single-digit
+µs max** against the 1,000 µs budget: roughly **5,000x** headroom at p99. (The
+max is noisy run-to-run, as any wall-clock measurement of a sub-microsecond
+call is; median and p99 are the numbers that matter here.)
+
+**Worth being honest about what that headroom is and isn't.** It is not
+evidence this project stress-tested a 1 ms budget; a `3x3` cofactor solve was
+never going to threaten it on any modern core. It *is* the number Phase 6 (if
+attempted) has to justify beating: the pitch for a learned manipulability
+estimator only makes sense once `det(J)` stops being nanoseconds, i.e. on a
+high-DOF arm where the exact Jacobian solve is no longer free. Measuring it
+here, on the arm where it's expected to be trivial, is what makes that later
+claim checkable instead of asserted.
+
+**One deliberate scope cut.** `simulate()`'s 4-stage RK4 evaluates the control
+law four times per integration step — a Python/C++ parity choice (see
+`armsim/sim.py`'s docstring), not something a real digital controller does. A
+real loop calls the control law once per tick under zero-order hold, so
+`step_control()` alone is what gets timed, not the RK4 wrapper around it. Timing
+the wrapper would have reported a number roughly 4x too pessimistic for what
+Phase 5 is actually trying to demonstrate.
 
 **Phase 6 — (stretch) learned manipulability estimator.** Small MLP
 `(q2, q3) → w`. Honest framing: for a `3x3` `J`, computing the determinant is
