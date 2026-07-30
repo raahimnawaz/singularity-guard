@@ -15,6 +15,7 @@ from armsim.kinematics import (
     joint_positions,
     manipulability,
 )
+from armsim.sim import Limits, SimResult, metrics, pose_error, simulate
 from armsim.singularity import (
     SINGULAR_Q2,
     joint_space_grid,
@@ -49,12 +50,6 @@ __all__ = [
     "radial_profile_swept",
     "singular_radius",
     "workspace_grid",
-    # control laws (Phases 3-4)
-    "AdaptiveDLS",
-    "DampedLeastSquares",
-    "NaiveInverse",
-    "det3",
-    "inv3",
     # task-space references (Phase 3)
     "Trajectory",
     "quintic",
@@ -62,4 +57,16 @@ __all__ = [
     "through_singularity",
     "well_conditioned",
     "wrap_angle",
+    # control laws (Phases 3-4)
+    "AdaptiveDLS",
+    "DampedLeastSquares",
+    "NaiveInverse",
+    "det3",
+    "inv3",
+    # closed loop + metrics
+    "Limits",
+    "SimResult",
+    "metrics",
+    "pose_error",
+    "simulate",
 ]
