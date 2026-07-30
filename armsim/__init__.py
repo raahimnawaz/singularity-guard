@@ -17,6 +17,14 @@ from armsim.singularity import (
     singular_radius,
     workspace_grid,
 )
+from armsim.trajectory import (
+    Trajectory,
+    quintic,
+    skim_singularity,
+    through_singularity,
+    well_conditioned,
+    wrap_angle,
+)
 
 __all__ = [
     # kinematics (Phase 1)
@@ -34,4 +42,11 @@ __all__ = [
     "radial_profile_swept",
     "singular_radius",
     "workspace_grid",
+    # task-space references (Phase 3)
+    "Trajectory",
+    "quintic",
+    "skim_singularity",
+    "through_singularity",
+    "well_conditioned",
+    "wrap_angle",
 ]
