@@ -79,7 +79,7 @@ Full numbers for all nine runs: [`results/metrics.md`](results/metrics.md).
 | 4 | Adaptive damped-least-squares controller — the contribution | ✅ done |
 | 5 | Dependency-free C++ port at a 1 kHz control rate | ✅ done |
 | 6 | *(stretch)* learned manipulability estimator | ⬜ |
-| 7 | `ros2_control` plugin driving a Webots dynamic plant | 🚧 builds; bring-up WIP |
+| 7 | `ros2_control` plugin driving a Webots dynamic plant | ✅ runs; comparison pending |
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap and
 [`docs/derivation.md`](docs/derivation.md) for the hand derivation.
@@ -234,10 +234,16 @@ plugin and pointed at a Webots model of the same 3R arm:
 
 ```bash
 docker build -f ros2/Dockerfile -t singularity-arm-webots .
-docker run --rm singularity-arm-webots                 # headless, Xvfb
-docker run --rm -e HEADLESS=0 -e DISPLAY=$DISPLAY \
-  -v /tmp/.X11-unix:/tmp/.X11-unix singularity-arm-webots   # with the GUI
+docker run --rm --shm-size=1g singularity-arm-webots            # headless, Xvfb
+docker run --rm --shm-size=1g -e HEADLESS=0 -e DISPLAY=$DISPLAY \
+  -v /tmp/.X11-unix:/tmp/.X11-unix singularity-arm-webots       # with the GUI
 ```
+
+**`--shm-size=1g` is required, not optional.** Docker's default 64 MB `/dev/shm`
+is too small for FastDDS's shared-memory transport, which fails with
+`RTPS_TRANSPORT_SHM ... open_and_lock_file failed`. The symptom is misleading:
+topics keep working while *services* time out, so the controllers appear to hang
+during spawning rather than reporting a transport error.
 
 The image bakes ROS 2 Jazzy, Webots R2025a, and the built workspace, so the demo
 needs no network access and no local ROS install.
@@ -249,15 +255,23 @@ parameter — so the three-way comparison is a config change, not a rebuild. It
 publishes `~/manipulability` and `~/damping` through `RealtimePublisher`, which
 is what makes `w` and `λ` observable live rather than only in post-processing.
 
-**Nothing about dynamics is claimed yet, and bring-up is not finished.** What
-works: the plugin builds clean on Jazzy under `-Wall -Wextra -Wpedantic`, the
-world loads in Webots R2025a with no errors or warnings, the arm renders, the
-driver attaches its extern controller, and `controller_manager` activates the
-hardware. What does not: controller *spawning* times out, because `/clock` is
-never published and a sim-time `controller_manager` cannot step without it. So
-the arm has not yet moved under this controller, `results/metrics.md` remains a
-purely kinematic result, and this section describes apparatus rather than
-findings. The prediction being tested — and it is written down
+**It runs, and the published values check out exactly.** Both controllers reach
+`active`, and `~/manipulability` and `~/damping` can be verified by hand against
+the joint state they were computed from. From one live sample:
+
+```
+joint2                  -0.045884852089259416
+~/manipulability         0.045868752639277255   = |l1·l2·sin(q2)|
+~/damping                0.16942083157381516    = λ_max(1 − w/w₀), λ_max=0.20, w₀=0.30
+```
+
+Both match to every published digit, so the closed-form manipulability and the
+adaptive damping schedule are demonstrably the ones running on the plant — not
+merely something the node emits.
+
+**What is still not claimed: anything about dynamics.** The three-law comparison
+has not been re-run against Webots, so `results/metrics.md` remains a purely
+kinematic result. The prediction being tested — and it is written down
 in [`docs/PLAN.md`](docs/PLAN.md) so it can be wrong — is that dynamics will
 *shrink* the naive controller's 2,434 rad/s headline (real motors cannot slew
 that fast; divergence turns into tracking failure instead) while *strengthening*

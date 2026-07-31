@@ -195,8 +195,9 @@ Phase 5 is actually trying to demonstrate.
 already nanoseconds, so the pitch is a proof-of-concept for high-DOF arms where
 the SVD is the bottleneck. Only after 1–5 ship.
 
-**Phase 7 — ros2_control plugin on a dynamic plant.** 🚧 Started before Phase 6,
-which is still open. `ros2/` wraps `armctl` (unmodified, included from
+**Phase 7 — ros2_control plugin on a dynamic plant.** 🚧 Runs; the comparison it
+exists to produce does not yet. Landed before Phase 6, which is still open.
+`ros2/` wraps `armctl` (unmodified, included from
 `../cpp/include`) in a `controller_interface::ControllerInterface` plugin that
 claims `<joint>/velocity` command interfaces and `<joint>/position` state
 interfaces, and runs the same three laws selected at runtime by a
@@ -248,21 +249,39 @@ is now top-down, which for a *planar* arm is the correct view rather than a
 stylistic one: the configuration is undistorted and `q2 → 0` collinearity is
 directly readable. The world now loads with zero errors and zero warnings.
 
-*How far bring-up actually gets.* Verified: the package compiles clean on Jazzy
-under `-Wall -Wextra -Wpedantic`; the world loads without complaint in Webots
-R2025a; the arm renders; `webots_ros2_driver` attaches its extern controller to
-it; and `controller_manager` initialises and activates the `singularity_arm`
-hardware component. Not yet working: controller **spawning**. Both spawners time
-out calling `/controller_manager/load_controller`, because `/clock` is never
-published — `controller_manager` is configured for sim time and is stepped by
-the simulator, so with no clock it accepts service requests and never answers
-them. The `Ros2Supervisor` that publishes `/clock` starts but does not attach,
-while the arm's own extern controller does. That asymmetry is the open thread.
+*Bring-up works.* Both controllers reach `active`, the arm moves, and
+`~/manipulability` / `~/damping` are verifiable by hand against the joint state
+they came from — `w = |l1·l2·sin(q2)|` and `λ = λ_max(1 − w/w₀)` reproduce the
+published values to every digit. That is the check worth having: it shows the
+closed form and the schedule from Phases 1–4 are the ones actually executing on
+a dynamic plant, rather than a node emitting plausible-looking numbers.
 
-*Then the actual deliverable.* Once controllers spawn, the three-law comparison
-against `results/metrics.md` has to be recorded on the Webots plant. That
-comparison is the point of this phase; the plugin is only apparatus. Until it
-lands, nothing in this repo claims a dynamics result.
+*The bug that cost the most, because the symptom pointed at the wrong layer.*
+Controller spawning timed out on `/controller_manager/load_controller` while
+topics kept flowing, which reads unmistakably like a `controller_manager` or
+sim-time problem — it is neither. Docker's default `/dev/shm` is 64 MB, too
+small for FastDDS's shared-memory transport, which fails with
+`RTPS_TRANSPORT_SHM ... open_and_lock_file failed`. Best-effort topic traffic
+survives the degraded transport; request/response services do not. So the
+controllers appear to hang during spawning instead of anything reporting a
+transport error. `docker run --shm-size=1g` is the fix, and it is required
+rather than advisory.
+
+*Five missing system libraries, found properly the second time.* Webots exits
+127 on the first absent `.so`, which surfaces as the same "controller_manager
+never appears" symptom. Chasing them one rebuild apiece found `libGLU`, then
+`libEGL`, then `libsndio`; a bare `ldd` over-reports hopelessly because Webots
+bundles its own Qt6/ODE/assimp and resolves them through its launcher's
+`LD_LIBRARY_PATH`. Setting that path first, *and* separately checking the Qt
+platform plugins — which are `dlopen`'d, so they never appear in the main
+binary's `ldd` at all, and which hid the two wayland libraries — gives the whole
+list in one pass. See the comment in `ros2/Dockerfile`.
+
+*The actual deliverable, still outstanding.* The three-law comparison has to be
+recorded on the Webots plant and set beside `results/metrics.md`. That
+comparison is the point of this phase; everything above is apparatus. Until it
+lands, nothing in this repo claims a dynamics result, and `results/metrics.md`
+stays a statement about a control law rather than about a robot.
 
 ## Testing plan
 

@@ -32,21 +32,38 @@ RUN mkdir -p /root/.ros/webots${WEBOTS_VERSION} \
     && rm /tmp/webots.tar.bz2
 ENV WEBOTS_HOME=/root/.ros/webotsR2025a/webots
 
-# Runtime deps for the Webots binary. Webots bundles its own Qt6/ODE/assimp
-# under lib/webots and finds them via its launcher's LD_LIBRARY_PATH, so most
-# of `ldd webots-bin | grep "not found"` is noise -- libGLU is the one that
-# genuinely is not in ros:jazzy-ros-base, and without it webots-bin exits 127
-# before opening the world. The xcb/X libs are what Qt's platform plugin needs
-# once it does start under Xvfb. python3-pil is for ros2_supervisor.py, which
-# imports urdf2webots -> PIL. Deliberately a separate layer after the download
-# above so editing this list does not re-fetch ~1.5 GB of Webots.
+# Runtime deps for the Webots binary. ros:jazzy-ros-base is headless and ships
+# almost none of these; without them webots-bin exits 127 on a missing .so
+# before it ever opens the world, which surfaces downstream as the far more
+# confusing "controller_manager never appears".
+#
+# Finding the list one failure per rebuild is slow, and a bare
+# `ldd webots-bin | grep "not found"` over-reports badly: Webots bundles its own
+# Qt6/ODE/assimp/OIS under lib/webots and resolves them via the LD_LIBRARY_PATH
+# its launcher script sets, which ldd does not know about. Set that path first
+# and the output becomes exactly the system libraries that are genuinely absent:
+#
+#   export LD_LIBRARY_PATH=$WEBOTS_HOME/lib/webots:$LD_LIBRARY_PATH
+#   ldd $WEBOTS_HOME/bin/webots-bin | grep "not found"
+#   for f in $WEBOTS_HOME/lib/webots/qt/plugins/platforms/*.so; do \
+#       ldd "$f" | grep "not found"; done
+#
+# The second loop matters: the Qt platform plugins are dlopen'd, so their
+# dependencies never show up in the main binary's ldd output at all. With this
+# list installed both commands report nothing missing. python3-pil is separate
+# again -- it is for ros2_supervisor.py, which imports urdf2webots -> PIL.
+#
+# Deliberately a layer after the download above, so editing this list does not
+# re-fetch ~1.5 GB of Webots.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libglu1-mesa \
+      libgl1 libglx-mesa0 libegl1 libgles2 libopengl0 libglvnd0 \
       libxkbcommon-x11-0 \
       libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
       libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
       libxcomposite1 libxcursor1 libxdamage1 libxi6 libxrandr2 libxtst6 \
-      libnss3 libasound2t64 \
+      libnss3 libasound2t64 libsndio7.0 \
+      libwayland-cursor0 libwayland-egl1 \
       python3-pil \
     && rm -rf /var/lib/apt/lists/*
 
