@@ -8,3 +8,10 @@ __pycache__/
 dist/
 build/
 cpp/build/
+
+# Webots writes this scratch file beside the world when it opens one.
+ros2/worlds/.*.wbproj
+
+# Recorded Webots runs -- regenerate with ros2/scripts/compare_laws.sh
+results/webots/*.csv
+results/webots/*.log

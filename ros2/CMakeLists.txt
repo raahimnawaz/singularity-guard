@@ -53,6 +53,9 @@ install(
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY ${ARMCTL_INCLUDE_DIR}/armctl DESTINATION include)
 install(DIRECTORY urdf worlds config launch DESTINATION share/${PROJECT_NAME})
+# Installed as a program (not into share/) so `ros2 run armctl_ros2_control
+# record_run.py` finds it on the libexec path with its exec bit intact.
+install(PROGRAMS scripts/record_run.py DESTINATION lib/${PROJECT_NAME})
 install(FILES armctl_ros2_control_plugin.xml DESTINATION share/${PROJECT_NAME})
 
 ament_export_include_directories(include)

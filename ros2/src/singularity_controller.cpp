@@ -97,6 +97,15 @@ controller_interface::CallbackReturn SingularityController::on_configure(
   lam_pub_ =
     std::make_unique<realtime_tools::RealtimePublisher<std_msgs::msg::Float64>>(lam_pub_raw_);
 
+  qdot_cmd_pub_raw_ = get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
+    "~/qdot_cmd", rclcpp::SystemDefaultsQoS());
+  qdot_cmd_pub_ =
+    std::make_unique<realtime_tools::RealtimePublisher<std_msgs::msg::Float64MultiArray>>(
+      qdot_cmd_pub_raw_);
+  // Sized once here so update() only ever assigns into existing storage --
+  // resizing a MultiArray inside the control loop would allocate.
+  qdot_cmd_pub_->msg_.data.resize(3, 0.0);
+
   RCLCPP_INFO(
     get_node()->get_logger(),
     "SingularityController configured: law=%s joints=[%s, %s, %s] loop=%s duration=%.2fs",
@@ -146,6 +155,18 @@ controller_interface::return_type SingularityController::update(
   const armctl::Vec3 xdot_cmd = traj_.twist(t) + kp_ * armctl::pose_error(traj_.pose(t), p_now);
 
   const armctl::ControlResult res = compute_command(q, xdot_cmd);
+
+  // Publish the law's raw output first, before the non-finite guard and the
+  // clamp below rewrite it. At an exact singularity the naive inverse can
+  // return inf/nan, and that is the honest thing to report here rather than
+  // the 0.0 the guard substitutes to keep the arm safe.
+  if (qdot_cmd_pub_ && qdot_cmd_pub_->trylock()) {
+    for (std::size_t i = 0; i < 3; ++i) {
+      qdot_cmd_pub_->msg_.data[i] = res.qdot[i];
+    }
+    qdot_cmd_pub_->unlockAndPublish();
+  }
+
   armctl::Vec3 cmd = res.qdot;
   for (int i = 0; i < 3; ++i) {
     if (!std::isfinite(cmd[i])) {

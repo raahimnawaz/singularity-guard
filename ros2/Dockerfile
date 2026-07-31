@@ -72,6 +72,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # connection attempt.
 ENV USER=root
 
+# Put FastDDS on UDP only. Its shared-memory transport is the least reliable
+# thing in this image: it fails with "open_and_lock_file failed" even against a
+# 1 GB /dev/shm, and it fails *partially* -- topics keep flowing while services
+# stop completing, so controller spawners hang and it looks like a
+# controller_manager bug. See the XML for the full reasoning.
+COPY ros2/config/fastdds_udp_only.xml /opt/fastdds_udp_only.xml
+ENV FASTRTPS_DEFAULT_PROFILES_FILE=/opt/fastdds_udp_only.xml
+
 # webots_ros2_driver decides it is running under WSL from the kernel string
 # alone:  def is_wsl(): return 'microsoft-standard' in uname().release
 # Docker Desktop on Windows runs its Linux VM *on top of* WSL2, so every

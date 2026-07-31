@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Force FastDDS onto UDPv4 and disable its shared-memory transport.
+
+  Why: SHM is FastDDS's default first-choice transport, and inside a container
+  it is the single most fragile part of the stack. It fails with
+
+      RTPS_TRANSPORT_SHM Error] Failed init_port fastrtps_port7000:
+      open_and_lock_file failed
+
+  and the failure is partial in the worst possible way -- best-effort topic
+  traffic keeps flowing over UDP while request/response *services* silently
+  stop completing. The visible symptom is `ros2 control` spawners hanging on
+  /controller_manager/load_controller until they time out, which reads exactly
+  like a controller_manager or sim-time bug and is neither.
+
+  Raising --shm-size helps but does not reliably fix it: a 1 GB /dev/shm that
+  is empty and writable still produced the same error here. Since nothing in
+  this demo needs shared-memory throughput -- a 3-joint arm at 125 Hz is
+  nowhere near UDP's limits -- the robust answer is to not use the transport
+  at all rather than to keep tuning it.
+
+  useBuiltinTransports=false is the part that actually matters: without it
+  FastDDS adds SHM back alongside whatever is listed here.
+-->
+<dds xmlns="http://www.eprosima.com">
+  <profiles>
+    <transport_descriptors>
+      <transport_descriptor>
+        <transport_id>udp_only_transport</transport_id>
+        <type>UDPv4</type>
+      </transport_descriptor>
+    </transport_descriptors>
+
+    <participant profile_name="udp_only_participant" is_default_profile="true">
+      <rtps>
+        <userTransports>
+          <transport_id>udp_only_transport</transport_id>
+        </userTransports>
+        <useBuiltinTransports>false</useBuiltinTransports>
+      </rtps>
+    </participant>
+  </profiles>
+</dds>

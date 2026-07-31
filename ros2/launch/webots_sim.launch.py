@@ -35,7 +35,12 @@ def get_ros2_nodes(*args):
         robot_description_content = f.read()
 
     use_sim_time = LaunchConfiguration('use_sim_time', default=True)
-    controller_manager_timeout = ['--controller-manager-timeout', '60']
+    # 60s is enough on an idle machine and not enough on a busy one. Webots has
+    # to load the world and attach the extern controller before controller_manager
+    # offers its services at all, and under memory pressure that alone can exceed
+    # a minute -- at which point the spawners die and the symptom is "controllers
+    # never activated", which looks nothing like "the host was short on RAM".
+    controller_manager_timeout = ['--controller-manager-timeout', '180']
     controller_manager_prefix = 'python.exe' if os.name == 'nt' else ''
 
     joint_state_broadcaster_spawner = Node(

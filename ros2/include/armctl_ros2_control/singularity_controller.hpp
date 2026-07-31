@@ -12,6 +12,7 @@
 #include "controller_interface/controller_interface.hpp"
 #include "realtime_tools/realtime_publisher.hpp"
 #include "std_msgs/msg/float64.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 
 #include "armctl/controllers.hpp"
 #include "armctl/kinematics.hpp"
@@ -70,6 +71,17 @@ private:
   std::shared_ptr<rclcpp::Publisher<std_msgs::msg::Float64>> lam_pub_raw_;
   std::unique_ptr<realtime_tools::RealtimePublisher<std_msgs::msg::Float64>> w_pub_;
   std::unique_ptr<realtime_tools::RealtimePublisher<std_msgs::msg::Float64>> lam_pub_;
+
+  // The control law's raw output, before the qdot_max clamp and before the
+  // non-finite guard. Published because it is not otherwise observable: the
+  // joint only ever sees the clamped value, and the headline result this
+  // project reports -- naive J^-1 commanding thousands of rad/s at a
+  // singularity -- is a statement about the command, not about what any motor
+  // did. Without this topic the Webots runs could not be compared against
+  // results/metrics.md's peak_qdot_cmd at all.
+  std::shared_ptr<rclcpp::Publisher<std_msgs::msg::Float64MultiArray>> qdot_cmd_pub_raw_;
+  std::unique_ptr<realtime_tools::RealtimePublisher<std_msgs::msg::Float64MultiArray>>
+    qdot_cmd_pub_;
 };
 
 }  // namespace armctl_ros2_control
