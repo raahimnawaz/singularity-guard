@@ -26,6 +26,20 @@ So scheduling the damping buys selectivity, not better protection. Every scenari
 
 ## How it works
 
+```mermaid
+flowchart LR
+  ref["Task-space reference<br>p_ref, ṗ_ref"] --> cmd["Commanded twist<br>ẋ = ṗ_ref + kp (p_ref − p)"]
+  cmd --> law["Control law<br>naive · fixed λ · adaptive λ"]
+  law --> sat["Actuator limit<br>±3 rad/s"]
+  sat --> plant["Arm<br>(kinematic plant, RK4)"]
+  plant --> q["Joint angles q"]
+  q --> fk["Forward kinematics → p"]
+  fk --> cmd
+  q --> w["Manipulability<br>w = |det J|"]
+  w --> lam["Damping schedule λ(w)"]
+  lam --> law
+```
+
 - **Where the singularity is.** The arm tracks its full pose (x, y, φ), so the Jacobian is square and its determinant has a closed form: `det(J) = l1 · l2 · sin(q2)`. The arm is singular exactly when its first two links line up. [Derivation](docs/derivation.md).
 - **How close it is.** Manipulability `w = |det(J)|` falls to zero at the singularity, and the controller watches it.
 - **The three control laws:**
@@ -76,7 +90,13 @@ docker run --rm --shm-size=1g singularity-arm-webots   # ROS 2 + Webots, headles
 
 - **The results come from a kinematic plant.** Joint velocities are integrated directly, with no mass, inertia or torque limits. The 2,434 rad/s is what the naive law asks for, not what a motor could deliver.
 - **The comparison on the dynamic Webots arm is still pending.** The prediction it will test is written down in [docs/PLAN.md](docs/PLAN.md): dynamics should shrink the naive controller's headline and strengthen the smoothness case for adaptive damping.
-- **A planar 3R arm is the simplest useful case.** Its singularities can be derived by hand. A 6-DOF arm would need an SVD-based measure instead of a closed-form determinant.
+- **A planar 3R arm is the simplest useful case.** Its singularities can be derived by hand. A real arm needs an SVD-based measure instead of a closed-form determinant.
+
+## Future plans
+
+- **Run the pending comparison on the dynamic Webots arm**, to see how mass, inertia and torque limits change the three-way result.
+- **Add MoveIt's slow-down-and-stop method as a fourth controller.** MoveIt Servo scales motion down as the Jacobian's condition number rises and stops at a hard threshold, which is the approach most ROS arms use today.
+- **Move to a 7-DOF arm.** A redundant arm has a non-square Jacobian, so manipulability comes from the singular values, and the spare degree of freedom can steer away from singularities instead of only damping through them.
 
 ## More detail
 
