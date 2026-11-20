@@ -39,6 +39,15 @@ So scheduling the damping buys selectivity, not better protection. Every scenari
 - **Why damping works.** `J Jᵀ + λ² I` stays invertible even when `J` itself is singular, so the commanded joint speed stays bounded.
 - **Built to port.** All three laws share one explicit 3×3 inverse with no allocation, so the same math runs as C++ inside a 1 kHz loop.
 
+## Prior work
+
+Damped least squares is the standard answer to kinematic singularities, and this repo does not claim to invent it. It reimplements the established methods and measures them against each other on a case where the truth is known exactly.
+
+- **Damped least squares:** Nakamura & Hanafusa (1986), Wampler (1986).
+- **Damping scheduled on manipulability:** the form used here follows Nakamura & Hanafusa and Chiaverini (1997).
+- **Related approaches:** numerical filtering (Maciejewski & Klein, 1988) and selectively damped least squares (Buss & Kim, 2005).
+- **In production:** MoveIt Servo takes a different route, slowing the commanded motion as the Jacobian's condition number rises and stopping at a hard threshold.
+
 ## Implementations
 
 | | Status |
