@@ -1,8 +1,5 @@
-// ros2_control wrapper around armctl (cpp/include/armctl, Phase 5). The
-// control math is untouched and imported as-is; this class only adds the
-// ros2_control plumbing (interfaces, parameters, diagnostics) and a runtime
-// switch between the three control laws, since armctl's laws are plain
-// structs with no common base to select between at runtime.
+// ros2_control wrapper around the armctl headers: interfaces, parameters,
+// diagnostics, and a runtime switch between the three control laws.
 #pragma once
 
 #include <memory>
@@ -37,13 +34,10 @@ public:
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
 private:
-  // Runtime dispatch among armctl's three control laws: they share a
-  // compute(arm, q, xdot) -> ControlResult signature but no common base, so
-  // this is a plain switch rather than a virtual call.
+  // The laws share a signature but no base class, so dispatch is a switch.
   armctl::ControlResult compute_command(const armctl::Vec3 & q, const armctl::Vec3 & xdot) const;
 
-  // Parameters, declared in on_init() so YAML overrides from
-  // config/controllers.yaml are already applied by the time they're read.
+  // Declared in on_init() so YAML overrides apply before they are read.
   std::vector<std::string> joint_names_;
   std::string controller_law_ = "adaptive";  // naive | fixed | adaptive
   double w0_ = 0.30;
@@ -72,13 +66,8 @@ private:
   std::unique_ptr<realtime_tools::RealtimePublisher<std_msgs::msg::Float64>> w_pub_;
   std::unique_ptr<realtime_tools::RealtimePublisher<std_msgs::msg::Float64>> lam_pub_;
 
-  // The control law's raw output, before the qdot_max clamp and before the
-  // non-finite guard. Published because it is not otherwise observable: the
-  // joint only ever sees the clamped value, and the headline result this
-  // project reports -- naive J^-1 commanding thousands of rad/s at a
-  // singularity -- is a statement about the command, not about what any motor
-  // did. Without this topic the Webots runs could not be compared against
-  // results/metrics.md's peak_qdot_cmd at all.
+  // The law's raw output, before the clamp: the joint never sees it, but it is
+  // what results/metrics.md reports as peak_qdot_cmd.
   std::shared_ptr<rclcpp::Publisher<std_msgs::msg::Float64MultiArray>> qdot_cmd_pub_raw_;
   std::unique_ptr<realtime_tools::RealtimePublisher<std_msgs::msg::Float64MultiArray>>
     qdot_cmd_pub_;

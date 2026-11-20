@@ -86,25 +86,15 @@ def test_through_passes_exactly_through_the_singular_pose():
     assert np.allclose(p_mid, traj.meta["p_singular"], atol=1e-12)
 
     q_sing = traj.meta["q_singular"]
-    # The closed form is exact; sqrt(det(J J^T)) only gets within its ~1e-8
-    # roundoff floor, since forming the Gram matrix squares the condition number
-    # (see the note in tests/test_kinematics.py).
+    # sqrt(det(J J^T)) only reaches its ~1e-8 roundoff floor.
     assert det_jacobian(ARM, q_sing) == 0.0
     assert manipulability(ARM, q_sing) < 1e-7
 
 
 def test_through_commands_an_infeasible_twist_at_the_singularity():
-    """This is the test that would have caught the original design error.
+    """At the singularity the commanded twist must leave range(J).
 
-    A reference built as ``p_ref = FK(q_ref)`` has ``pdot_ref = J qdot_ref``, which
-    lies in the *range* of J by construction -- so a bounded joint velocity
-    achieving it exists even at a singularity, the naive controller sails through,
-    and the experiment measures nothing. A straight task-space line has no such
-    guarantee, and at the singularity the range of J collapses to 2-D, so the
-    commanded direction must have a component outside it.
-
-    Concretely: the residual of projecting the commanded twist onto range(J) has
-    to be non-negligible.
+    Guards against building the reference as FK of a joint path (docs/lessons.md).
     """
     traj = through_singularity(ARM)
     q_sing = traj.meta["q_singular"]

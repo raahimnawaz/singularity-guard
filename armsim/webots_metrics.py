@@ -1,28 +1,10 @@
-"""Phase 7: turn the recorded Webots runs into the same metric set as armsim.
+"""Score the recorded Webots runs with the same metrics as the kinematic study.
 
     uv run python -m armsim.webots_metrics
 
-Reads ``results/webots/{naive,fixed,adaptive}.csv`` -- written by
-``ros2/scripts/record_run.py`` inside the container -- and reports them beside
-the kinematic numbers in ``results/metrics.json``.
-
-The trajectory and forward kinematics come from ``armsim`` itself rather than
-being reimplemented here, so the reference pose a Webots run is scored against
-is bit-identical to the one the offline runs were scored against. Anything else
-would make the two columns incomparable in a way no reader could see.
-
-What the recorded columns actually mean, because three different velocities are
-easy to conflate:
-
-``qdc``  the control law's raw output, before the clamp. This is what
-         ``peak_qdot_cmd`` means in ``results/metrics.md``, and the only one of
-         the three that is comparable to the 2,434 rad/s headline.
-``clamp(qdc)``  what the controller wrote to the command interface. Derived here
-         rather than recorded, since it is exactly ``clip(qdc, ±qdot_max)``.
-``qd``   what the joint actually reached, reported by Webots. This one has no
-         counterpart in the kinematic study at all -- the offline plant applies
-         the clamped command directly, with no mass, inertia, or torque limit
-         between command and motion. It is the whole reason this phase exists.
+Reads ``results/webots/{naive,fixed,adaptive}.csv`` from ``ros2/scripts/record_run.py``.
+Velocity columns: ``qdc`` is the law's raw output (comparable to the kinematic
+``peak_qdot_cmd``); ``qd`` is what the simulated joint actually reached.
 """
 
 from __future__ import annotations

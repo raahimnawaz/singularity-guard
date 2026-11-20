@@ -1,16 +1,8 @@
 #!/usr/bin/env python
-"""Launch the singularity-robust-control arm in Webots under ros2_control.
-
-Structure follows Cyberbotics' own webots_ros2_husarion launch pattern:
-WebotsLauncher starts the simulator (with a Ros2Supervisor for spawn/reset
-events), WebotsController attaches our robot's <extern> controller process
-(which loads webots_ros2_control::Ros2Control -> Ros2ControlSystem -> our
-armctl_ros2_control/SingularityController via controller_manager), and
-controller_manager spawner nodes activate the controllers once the driver
-reports ready.
+"""Launch the arm in Webots under ros2_control.
 
     ros2 launch armctl_ros2_control webots_sim.launch.py
-    ros2 launch armctl_ros2_control webots_sim.launch.py mode:=fast   # headless-friendly
+    ros2 launch armctl_ros2_control webots_sim.launch.py mode:=fast
 """
 
 import os
@@ -35,11 +27,7 @@ def get_ros2_nodes(*args):
         robot_description_content = f.read()
 
     use_sim_time = LaunchConfiguration('use_sim_time', default=True)
-    # 60s is enough on an idle machine and not enough on a busy one. Webots has
-    # to load the world and attach the extern controller before controller_manager
-    # offers its services at all, and under memory pressure that alone can exceed
-    # a minute -- at which point the spawners die and the symptom is "controllers
-    # never activated", which looks nothing like "the host was short on RAM".
+    # Generous timeout: on a loaded machine Webots can take over a minute to attach.
     controller_manager_timeout = ['--controller-manager-timeout', '180']
     controller_manager_prefix = 'python.exe' if os.name == 'nt' else ''
 
@@ -81,9 +69,7 @@ def get_ros2_nodes(*args):
         }],
     )
 
-    # Waits for the Webots controller to report ready before spawning
-    # controllers, so controller_manager doesn't try to claim interfaces from
-    # a hardware plugin that hasn't attached yet.
+    # Spawn controllers only once the Webots driver reports ready.
     waiting_nodes = WaitForControllerConnection(
         target_driver=arm_driver,
         nodes_to_start=ros_control_spawners,

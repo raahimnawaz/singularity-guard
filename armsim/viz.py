@@ -1,13 +1,7 @@
-"""Plotting for the singularity maps (Phase 2) and the arm itself (reused later).
+"""Plotting for the singularity maps and the arm.
 
-Figures are written as PNGs into ``results/`` by ``armsim.run_heatmap``.  Nothing
-here is imported by the control path -- keep matplotlib out of anything that has
-to stay portable to C++ in Phase 5.
-
-Colour choices follow one rule: manipulability is a *magnitude*, so it gets a
-single-hue sequential ramp (light = near zero, dark = well conditioned), never a
-rainbow.  The singular locus is drawn in the reserved "critical" red and always
-carries a text label, so the meaning never rests on colour alone.
+Manipulability uses a single-hue sequential ramp; the singular locus is red and
+always labelled.
 """
 
 from __future__ import annotations
@@ -157,9 +151,7 @@ def plot_radial_validation(arm: RobotArm, n_r: int = 300, n_q: int = 1200):
     """Swept ``w_max`` vs the closed form -- the figure that makes Phase 2 falsifiable."""
     import matplotlib.pyplot as plt
 
-    # Plot each bin's winner at the radius it actually occurred, not the bin centre
-    # -- otherwise the boundary points ride visibly above the curve for no reason
-    # other than bin width.
+    # Plot each bin's winner at its actual radius, not the bin centre.
     _, w_swept, r_swept = radial_profile_swept(arm, n_r=n_r, n_q2=n_q, n_q3=n_q)
     r_fine = np.linspace(0.0, arm.reach, 1200)
     w_closed = max_manipulability_at_radius(arm, r_fine)
@@ -167,9 +159,6 @@ def plot_radial_validation(arm: RobotArm, n_r: int = 300, n_q: int = 1200):
     fig, ax = plt.subplots(figsize=(7.0, 4.4))
     ax.grid(True, lw=0.8, alpha=0.9)
     ax.set_axisbelow(True)
-    # Markers under the line, so the curve is visibly running *through* them. With
-    # the line on top the near-vertical stretch by the boundary reads honestly
-    # instead of looking like the dots float above it.
     seen = np.isfinite(w_swept)
     ax.plot(r_swept[seen], w_swept[seen], "o", color=SERIES_2, ms=5.0, zorder=3,
             mfc=SERIES_2, mec=SURFACE, mew=0.8, label="brute-force sweep")

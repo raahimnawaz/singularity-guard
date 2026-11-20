@@ -1,13 +1,7 @@
-// The three control laws, ported term-for-term from armsim/controllers.py:
-//
-//   NaiveInverse    qdot = J^-1 xdot                         (Phase 3 baseline)
-//   DampedLeastSquares  qdot = J^T (J J^T + lam^2 I)^-1 xdot, lam fixed
-//   AdaptiveDLS         same law, lam scheduled off manipulability (Phase 4)
-//
-// All three share dls_kernel()/inv3(), the one explicit cofactor inverse --
-// no general solver, because JJ^T + lam^2 I is symmetric positive-definite by
-// construction for any lam > 0, which is the entire point of DLS: avoiding
-// the ill-conditioned inverse of J itself.
+// The three control laws, ported term for term from armsim/controllers.py:
+//   naive     qdot = J^-1 xdot
+//   fixed     qdot = J^T (J J^T + lam^2 I)^-1 xdot
+//   adaptive  same, with lam scheduled on manipulability
 #pragma once
 
 #include <cmath>
@@ -22,10 +16,7 @@ struct ControlResult {
     double lam;
 };
 
-// Shared DLS kernel. lam == 0 reduces exactly to J^-1 xdot, matching
-// armsim/controllers.py::_dls (which special-cases lam == 0 the same way
-// rather than relying on J J^T + 0*I to be well-conditioned, since it is not
-// -- it is exactly as singular as J itself there).
+// Shared DLS kernel; lam == 0 reduces exactly to J^-1 xdot.
 inline Vec3 dls_kernel(const RobotArm& arm, const Vec3& q, const Vec3& xdot, double lam) {
     const Mat3 j = jacobian(arm, q);
     if (lam == 0.0) {
@@ -54,17 +45,12 @@ struct DampedLeastSquares {
 };
 
 struct AdaptiveDLS {
-    // Defaults from the (w0, lam_max) sweep in armsim/run_experiment.py --
-    // the cheapest corner of the grid that reaches 0% saturation on the
-    // through-singularity run.
+    // Defaults from the (w0, lam_max) sweep in armsim/run_experiment.py.
     double w0 = 0.30;
     double lam_max = 0.20;
 
-    // Scheduled lambda: lam^2 = lam_max^2 (1 - w/w0)^2 for w < w0, else 0.
-    // Uses |det3(J)| rather than manipulability() for the same reason the
-    // Python does: the Gram determinant squares the condition number and
-    // bottoms out around 1e-8 near a singularity, while the cofactor
-    // determinant stays accurate to roundoff.
+    // lam = lam_max (1 - w/w0) for w < w0, else 0. Uses |det3(J)|, which stays
+    // accurate near zero.
     double damping(const RobotArm& arm, const Vec3& q) const {
         const double w = std::abs(det3(jacobian(arm, q)));
         if (w >= w0) {

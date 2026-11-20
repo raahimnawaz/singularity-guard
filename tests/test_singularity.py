@@ -1,11 +1,4 @@
-"""Phase 2 tests: the singularity maps, and the closed forms behind them.
-
-The load-bearing tests here are the ones that pit a *derivation* against a
-*brute-force sweep*: ``test_radial_profile_matches_closed_form`` and
-``test_workspace_grid_is_radially_symmetric``.  Either the algebra in
-``singularity.py`` is right or a few hundred thousand sampled configurations
-disagree with it.
-"""
+"""Singularity maps checked against their closed forms."""
 
 import numpy as np
 import pytest
@@ -29,12 +22,7 @@ HOLED_ARM = RobotArm(1.3, 0.5, 0.2)
 
 
 def _bin_upper_bound(arm: RobotArm, r_lo, r_hi, n_sub: int = 17):
-    """Largest closed-form ``w`` anywhere in ``[r_lo, r_hi]``.
-
-    A swept map records the best sample landing in a bin, and ``w_max(r)`` varies
-    across that bin -- steeply so near the boundary -- so the honest ceiling for
-    the sweep is the maximum over the bin, not the value at its centre.
-    """
+    """Largest closed-form ``w`` anywhere in ``[r_lo, r_hi]``."""
     t = np.linspace(0.0, 1.0, n_sub)
     r = np.asarray(r_lo)[..., None] + (np.asarray(r_hi) - np.asarray(r_lo))[..., None] * t
     return max_manipulability_at_radius(arm, r).max(axis=-1)
@@ -80,10 +68,7 @@ def test_joint_space_grid_zeros_sit_on_the_locus():
 
 
 def test_radial_profile_never_beats_the_closed_form():
-    # The real test of the algebra: no swept configuration may be better
-    # conditioned than max_manipulability_at_radius() allows at its own radius.
-    # Evaluating at r_at_max rather than the bin centre makes this exact -- no
-    # bin-width tolerance to hide behind.
+    # No swept configuration may beat the closed-form w_max at its own radius.
     for arm in (UNIT_ARM, ODD_ARM):
         _, w_swept, r_at = radial_profile_swept(arm, n_r=200, n_q2=1400, n_q3=1400)
         seen = np.isfinite(w_swept)

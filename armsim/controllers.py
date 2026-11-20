@@ -1,27 +1,7 @@
-"""Velocity-level controllers: the naive inverse, and the damped-least-squares fix.
+"""Velocity-level control laws: the naive inverse and two damped-least-squares variants.
 
-Three laws, one interface, so the experiment harness can swap them and the only
-difference in the resulting plots is the control law itself:
-
-* :class:`NaiveInverse` -- ``qdot = J^-1 xdot``. Phase 3's baseline, included to
-  fail.
-* :class:`DampedLeastSquares` -- ``qdot = J^T (J J^T + lam^2 I)^-1 xdot`` with a
-  constant ``lam``. Bounded near the singularity, but pays damping error
-  *everywhere*, including where the arm is perfectly well-conditioned.
-* :class:`AdaptiveDLS` -- the same law with ``lam`` scheduled off manipulability,
-  so damping is spent only where it is needed. Phase 4's contribution.
-
-Everything is closed-form and fixed-size: an explicit cofactor inverse, no
-``np.linalg.solve``, no SVD. That is not a micro-optimisation, it is the Phase 5
-constraint -- this file has to become dependency-free C++ running inside a 1 ms
-budget, and a 3x3 cofactor inverse is a fixed instruction sequence with no
-allocation and no iteration.
-
-Note that :class:`DampedLeastSquares` inverts ``J J^T + lam^2 I``, not ``J``.
-That matrix is symmetric positive-definite for any ``lam > 0``, so the cofactor
-inverse is well-conditioned by construction even when ``J`` itself is exactly
-singular. Avoiding the ill-conditioned inverse is the entire point of the method,
-so it would be self-defeating to reach for a general solver here.
+All three use an explicit 3x3 cofactor inverse (no solver, no SVD) so the same
+math ports to allocation-free C++.
 """
 
 from __future__ import annotations
@@ -50,18 +30,10 @@ def det3(m: Array) -> float:
 
 
 def inv3(m: Array) -> Array:
-    """Explicit 3x3 inverse via the adjugate. Blows up when ``m`` is singular.
+    """Explicit 3x3 inverse via the adjugate.
 
-    Deliberately does not guard against a small determinant: the caller decides
-    what a singular Jacobian means. :class:`NaiveInverse` wants the blow-up,
-    because that blow-up is the finding.
-
-    In practice the blow-up is enormous but *finite*. At an analytically singular
-    configuration the closed form gives ``det(J) = l1*l2*sin(0) = 0`` exactly, but
-    the cofactor expansion of a numerically-evaluated ``J`` lands near 3e-16
-    instead, so this returns entries around 1e15 rather than ``inf``. That is the
-    honest failure mode of the naive law on real hardware -- a huge finite command
-    the actuator cannot honour, not a tidy NaN someone would have caught.
+    Unguarded on purpose: near a singularity it returns huge finite values,
+    which is the naive controller's real failure mode.
     """
     d = det3(m)
     adj = np.array(
@@ -89,13 +61,7 @@ def inv3(m: Array) -> Array:
 
 @dataclass(frozen=True)
 class NaiveInverse:
-    """``qdot = J^-1 xdot``. The baseline that fails.
-
-    Kept as a real implementation rather than a straw man: this is exactly what a
-    textbook resolved-rate controller does, and it is correct and well-behaved
-    everywhere except near a singularity. The point of Phase 3 is to measure
-    *how badly* that exception bites, not to invent a bad controller.
-    """
+    """``qdot = J^-1 xdot``: the textbook resolved-rate controller."""
 
     name: str = "naive"
     label: str = r"naive $J^{-1}$"
@@ -110,14 +76,9 @@ class NaiveInverse:
 
 @dataclass(frozen=True)
 class DampedLeastSquares:
-    """``qdot = J^T (J J^T + lam^2 I)^-1 xdot`` with fixed ``lam``.
+    """``qdot = J^T (J J^T + lam^2 I)^-1 xdot`` with a constant ``lam``.
 
-    Solves the regularised least-squares problem
-    ``min ||J qdot - xdot||^2 + lam^2 ||qdot||^2``: it trades task accuracy for
-    joint-velocity norm at a fixed exchange rate. Bounded everywhere, but the
-    fixed rate is the flaw -- the damping error is paid in well-conditioned
-    regions where no damping was needed. That is what :class:`AdaptiveDLS` fixes,
-    and why this class is here as the intermediate step rather than the answer.
+    Minimises ``||J qdot - xdot||^2 + lam^2 ||qdot||^2``.
     """
 
     lam: float = 0.1
@@ -140,30 +101,15 @@ class DampedLeastSquares:
 
 @dataclass(frozen=True)
 class AdaptiveDLS:
-    """DLS with damping scheduled off manipulability -- the Phase 4 contribution.
+    """DLS with damping scheduled on manipulability (Nakamura/Chiaverini)::
 
-    Nakamura/Chiaverini scheduling::
+        lam = lam_max * (1 - w/w0)   for w < w0, else 0
 
-        lam^2 = lam_max^2 * (1 - w/w0)^2   for w < w0
-        lam   = 0                          otherwise
-
-    so ``lam`` ramps continuously from 0 at the threshold ``w0`` to ``lam_max``
-    at the singularity. Continuity matters: a step change in ``lam`` would show
-    up as a joint-acceleration spike, which is exactly the kind of artefact the
-    smoothness metric is there to catch.
-
-    Away from the singularity this *is* the naive controller (``lam = 0``,
-    identical output), so it inherits the baseline's accuracy where the baseline
-    is fine and only diverges where the baseline breaks. That property is
-    asserted in the tests.
+    Continuous in ``w``, and identical to the naive law when ``w >= w0``.
     """
 
-    # Defaults chosen from the (w0, lam_max) sweep in run_experiment.py, not by
-    # taste: this is the cheapest corner of the grid that reaches 0% saturation
-    # on the through-singularity run. Damping earlier turns out to be nearly
-    # free -- pushing w0 from 0.05 to 0.30 cuts peak commanded velocity ~6x while
-    # tracking error *improves*, because the error was coming from saturation
-    # rather than from the damping.
+    # Defaults from the (w0, lam_max) sweep in run_experiment.py: the cheapest
+    # setting with 0% saturation on the through-singularity run.
     w0: float = 0.30
     lam_max: float = 0.20
     name: str = "dls_adaptive"
@@ -179,22 +125,10 @@ class AdaptiveDLS:
         return rf"adaptive-$\lambda$ DLS ($w_0$={self.w0:g}, $\lambda_{{max}}$={self.lam_max:g})"
 
     def damping(self, arm: RobotArm, q: Array) -> float:
-        """Scheduled ``lambda`` from the manipulability at ``q``.
+        """Scheduled ``lambda`` at ``q``.
 
-        Uses ``|det3(J)|`` rather than ``kinematics.manipulability()``. For a
-        square Jacobian the two are the same quantity -- ``w = sqrt(det(J J^T)) =
-        |det(J)|`` -- but they are not numerically equal near a singularity.
-        Forming the Gram matrix squares the condition number, so
-        ``sqrt(det(J J^T))`` bottoms out around 1e-8 (documented in
-        ``tests/test_kinematics.py``) while the cofactor determinant stays
-        accurate to roundoff, ~3e-16.
-
-        The difference is immaterial to the output -- a 1e-8 error in ``w``
-        perturbs ``lambda`` by ~1e-7 -- but it is free, and it removes a numerical
-        floor from the one input the scheduler reads closest to zero. It also
-        matters for Phase 5: ``det3`` is a fixed arithmetic sequence that ports to
-        dependency-free C++ untouched, whereas ``manipulability()`` calls
-        ``np.linalg.det``.
+        Uses ``|det3(J)|``, which stays accurate near zero where
+        ``sqrt(det(J J^T))`` bottoms out around 1e-8.
         """
         w = abs(det3(jacobian(arm, q)))
         if w >= self.w0:

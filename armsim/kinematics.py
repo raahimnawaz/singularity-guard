@@ -1,19 +1,8 @@
-"""Forward kinematics, analytical Jacobian, and manipulability for a planar 3R arm.
+"""Forward kinematics, analytical Jacobian and manipulability for a planar 3R arm.
 
-The task space is the full end-effector pose ``p = [x, y, phi]`` (position +
-orientation), so the Jacobian ``J = dp/dq`` is square (3x3) and ``det(J)`` is well
-defined -- that is the whole reason we track orientation instead of position only.
-
-Every function here is scalar-config (one ``q`` at a time) and closed-form: no
-SVD, no linear solves.  This is deliberate -- it is the exact math that gets
-ported to dependency-free C++ in Phase 5, so it stays trivially portable.
-
-See ``docs/derivation.md`` for the hand derivation.  Headline result::
-
-    det(J) = l1 * l2 * sin(q2)
-
-so the arm is singular exactly when the first two links are collinear
-(``q2 = 0`` or ``q2 = pi``), independent of ``q1``, ``q3``, and ``l3``.
+The task is the full pose ``[x, y, phi]``, so ``J`` is square and
+``det(J) = l1 * l2 * sin(q2)``: singular when the first two links line up.
+Derivation in ``docs/derivation.md``.
 """
 
 from __future__ import annotations
@@ -90,13 +79,7 @@ def joint_positions(arm: RobotArm, q: Array) -> Array:
 
 
 def jacobian(arm: RobotArm, q: Array) -> Array:
-    """Analytical 3x3 task Jacobian ``J = d[x, y, phi] / d[q1, q2, q3]``.
-
-    Derived by hand rather than by autodiff -- doing it manually is what exposes
-    the singularity structure.  Column ``j`` is joint ``j``'s contribution to
-    ``[xdot, ydot, phidot]``; the all-ones bottom row is because every joint adds
-    one-for-one to the end-effector orientation.
-    """
+    """Analytical 3x3 task Jacobian ``J = d[x, y, phi] / d[q1, q2, q3]``."""
     q = np.asarray(q, dtype=float)
     t1, t12, t123 = _cumulative_angles(q)
     l1, l2, l3 = arm.links
@@ -115,22 +98,13 @@ def jacobian(arm: RobotArm, q: Array) -> Array:
 
 
 def det_jacobian(arm: RobotArm, q: Array) -> float:
-    """Closed-form Jacobian determinant: ``det(J) = l1 * l2 * sin(q2)``.
-
-    The third joint and the orientation row factor out of the determinant, leaving
-    the position-Jacobian determinant of the inner 2R sub-arm (base -> wrist).
-    See ``docs/derivation.md``.
-    """
+    """Closed-form Jacobian determinant: ``det(J) = l1 * l2 * sin(q2)``."""
     q = np.asarray(q, dtype=float)
     return float(arm.l1 * arm.l2 * np.sin(q[1]))
 
 
 def manipulability(arm: RobotArm, q: Array) -> float:
-    """Yoshikawa manipulability index ``w = sqrt(det(J @ J.T))``.
-
-    For a square Jacobian this equals ``|det(J)| = l1 * l2 * |sin(q2)|``.  ``w -> 0``
-    at a singularity; it is the scalar the adaptive damping (Phase 4) keys off of.
-    """
+    """Yoshikawa manipulability ``w = sqrt(det(J J^T))``; equals ``|det(J)|`` here."""
     j = jacobian(arm, q)
     gram_det = float(np.linalg.det(j @ j.T))
     return float(np.sqrt(max(gram_det, 0.0)))

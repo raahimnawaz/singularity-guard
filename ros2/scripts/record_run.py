@@ -1,21 +1,12 @@
 #!/usr/bin/env python3
-"""Record one Webots run to CSV, for the Phase 7 three-law comparison.
+"""Record one Webots run to CSV for the three-law comparison.
 
-Subscribes to /joint_states plus the controller's own ~/manipulability and
-~/damping diagnostics, and writes one row per joint-state message:
+Writes one row per /joint_states message, on sim time:
 
     t,q1,q2,q3,qd1,qd2,qd3,w,lam,qdc1,qdc2,qdc3
 
-Only raw signals are recorded. Every derived quantity -- tracking error,
-saturation fraction, RMS acceleration -- is computed afterwards by
-armsim.sim.metrics on the host, so the Webots numbers and the kinematic numbers
-in results/metrics.md come out of exactly the same function rather than two
-implementations that are meant to agree.
-
-Runs on **sim time**: the trajectory is defined against the simulator clock, and
-Webots in --mode=fast does not advance in step with wall time. Sampling on wall
-time would stretch or compress the trajectory depending on how fast the
-simulator happened to run.
+Metrics are computed afterwards by armsim.sim.metrics, the same function as
+the kinematic study.
 
     ros2 run armctl_ros2_control record_run.py --out /out/run.csv --duration 2.0
 """

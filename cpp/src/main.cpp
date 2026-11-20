@@ -1,16 +1,6 @@
-// Phase 5: dependency-free real-time port.
-//
-// Runs the same closed loop as armsim.sim.simulate() on the through-
-// singularity scenario with the adaptive-DLS controller (the exact run that
-// produced results/golden_through.csv), and does two things with it:
-//
-//   1. Writes a CSV in that file's format. tests/parity_check.py holds it to
-//      the Python reference within 1e-9.
-//   2. Times step_control() -- the one control-law evaluation a real 1 kHz
-//      digital controller repeats every tick -- in isolation over every
-//      (t, q) the closed loop actually visited, and reports median/p99/max
-//      against a 1 ms budget. The 4-stage RK4 used to produce the CSV is an
-//      offline-integration artifact and is deliberately not what gets timed.
+// Runs the through-singularity scenario with adaptive DLS, writes a CSV in
+// the format of results/golden_through.csv (checked by tests/parity_check.py),
+// and times step_control() against a 1 ms budget.
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -81,9 +71,7 @@ int main(int argc, char** argv) {
     out.close();
     std::cout << "wrote " << out_path << " (" << log.size() << " rows)\n";
 
-    // Real-time headroom. checksum forces the compiler to keep every call --
-    // without it, a sufficiently aggressive optimizer could see the loop
-    // results are otherwise unused and remove the very thing being timed.
+    // checksum keeps the optimiser from removing the timed calls.
     std::vector<double> latency_us;
     latency_us.reserve(log.size());
     double checksum = 0.0;

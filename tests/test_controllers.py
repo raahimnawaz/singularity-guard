@@ -48,14 +48,7 @@ def test_inv3_is_an_inverse():
 
 
 def test_inv3_of_singular_blows_up():
-    """The naive law must be allowed to blow up; inv3 does not silently rescue it.
-
-    Note the blow-up is huge but finite. The closed form gives ``det(J) = 0``
-    exactly at ``q2 = 0``, yet the cofactor expansion of the numerically-evaluated
-    Jacobian lands near 3e-16, so the inverse has entries around 1e15 rather than
-    ``inf``. Asserting non-finiteness here would be asserting a tidier failure
-    than the one that actually happens.
-    """
+    """At the singularity the naive inverse is huge but finite (det lands near 3e-16)."""
     q_sing = np.array([0.3, 0.0, 0.7])             # q2 = 0
     assert det_jacobian(ARM, q_sing) == 0.0        # closed form: exactly zero
     j = jacobian(ARM, q_sing)
@@ -75,11 +68,7 @@ def test_dls_with_zero_lambda_equals_naive():
 
 
 def test_adaptive_is_identical_to_naive_when_well_conditioned():
-    """Above the threshold the schedule returns lam = 0, so it *is* the naive law.
-
-    This is the property that makes adaptive damping worth the complexity: it
-    inherits the baseline's accuracy wherever the baseline is fine.
-    """
+    """Above the threshold lam = 0, so adaptive DLS is the naive law exactly."""
     naive, adaptive = NaiveInverse(), AdaptiveDLS(w0=0.15, lam_max=0.3)
     for q in _random_q(20, min_w=0.25):     # comfortably above w0
         xdot = RNG.normal(size=3)
@@ -90,14 +79,7 @@ def test_adaptive_is_identical_to_naive_when_well_conditioned():
 
 
 def test_dls_output_is_bounded_at_the_singularity():
-    """The actual theorem, as a test.
-
-    ``||qdot|| <= ||xdot|| / (2*lam)`` for the damped least-squares solution: the
-    singular values of ``J^T (J J^T + lam^2 I)^-1`` are ``s/(s^2 + lam^2)``, which
-    is maximised at ``s = lam`` giving ``1/(2 lam)``. So the bound holds for *any*
-    Jacobian, including an exactly singular one -- which is the whole promise of
-    the method.
-    """
+    """DLS bound ``||qdot|| <= ||xdot|| / (2*lam)`` holds even for an exactly singular J."""
     lam = 0.1
     dls = DampedLeastSquares(lam=lam)
     q_sing = np.array([0.3, 0.0, 0.7])          # exactly singular

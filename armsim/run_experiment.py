@@ -114,10 +114,7 @@ def fig_naive_failure(runs: dict, limits: Limits, path: Path) -> None:
     plt.close(fig)
 
 
-# Draw order and weight are chosen so coincident curves stay readable: naive goes
-# down first and thick, adaptive last and dashed. In the well-conditioned column
-# adaptive is *bit-identical* to naive, and a thin solid line on top of another
-# solid line would just look like the baseline is missing from the plot.
+# Naive drawn first and thick, adaptive last and dashed, so identical curves stay visible.
 _STYLE = {
     "naive": {"lw": 2.8, "alpha": 0.85, "zorder": 2},
     "dls_fixed": {"lw": 1.7, "alpha": 1.0, "zorder": 3},
@@ -139,10 +136,7 @@ def fig_comparison(runs: dict, limits: Limits, path: Path) -> None:
                     color=COLORS[cname], label=res.meta["label"], **_STYLE[cname])
         ax.axhline(limits.qdot_max, color=INK, ls=":", lw=1.1, alpha=0.7,
                    label=f"actuator limit {limits.qdot_max:g} rad/s" if col == 0 else None)
-        # symlog with a small linear window: the quantity is a non-negative norm
-        # that genuinely touches zero at the skim turnaround, so a pure log scale
-        # cannot show it -- but the default linthresh wastes half the axis on
-        # negative values that cannot occur.
+        # symlog: the norm touches zero at the skim turnaround, so a log axis cannot show it.
         ax.set_yscale("symlog", linthresh=0.1, linscale=0.4)
         ax.set_ylim(bottom=0.0)
         ax.set_title(SCENARIO_TITLES[scen], loc="left", fontsize=10)
@@ -155,9 +149,7 @@ def fig_comparison(runs: dict, limits: Limits, path: Path) -> None:
             err = np.maximum(np.linalg.norm(res.err[:, :2], axis=1), _ERR_FLOOR)
             ax.plot(res.t, err, color=COLORS[cname], **_STYLE[cname])
         ax.set_yscale("log")
-        # Floor the axis: without it, most of the height is spent on the 1e-14
-        # roundoff of the laws that track perfectly, squashing the differences
-        # that actually matter into the top decade.
+        # Floor the axis so 1e-14 roundoff does not squash the differences that matter.
         ax.set_ylim(bottom=_ERR_FLOOR / 2.0)
         ax.set_xlabel("time [s]")
         if col == 0:

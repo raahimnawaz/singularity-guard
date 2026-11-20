@@ -1,30 +1,12 @@
 """Closed-loop simulation of the arm under a velocity controller, and the metrics.
 
-Kinematic plant: the state is ``q`` and the controller commands ``qdot`` directly.
-No torques, no inertia. That is the honest scope of this project -- it is about
-*kinematic* singularities and the velocity-level laws that stay well-behaved
-through them, and adding a dynamic model would obscure the one effect being
-measured.
+The plant is kinematic: the controller commands ``qdot`` directly. Joint speed
+limits are applied in the plant, not the controller, so the naive law fails the
+way a real arm would: it saturates and loses tracking.
 
-Two decisions in here shape every number the README reports.
-
-**Saturation lives in the plant, not the controller.** Real joints have speed
-limits, and clamping there is what makes the naive controller fail *realistically*
--- it saturates and loses tracking, rather than reporting ``1e16 rad/s`` and
-making the comparison a strawman about floating point. Putting the clamp in the
-controller instead would be handing the baseline a safety feature it does not
-have, which is the opposite error.
-
-**Control is resolved-rate with proportional feedback**::
+Control is resolved-rate with proportional feedback::
 
     xdot_cmd = pdot_ref + kp * (p_ref - p_actual)
-
-Pure feedforward (``kp = 0``) is available and is the cleaner isolation of the
-Jacobian-inversion effect, but it is not a controller anyone ships: integration
-error accumulates with nothing to correct it, so every law drifts and the plots
-show drift rather than singularity behaviour. With feedback the interesting thing
-becomes visible -- whether a law *recovers* after the singularity, or has thrown
-the arm somewhere it cannot come back from.
 """
 
 from __future__ import annotations
@@ -53,11 +35,7 @@ __all__ = [
 
 @dataclass(frozen=True)
 class Limits:
-    """Plant-side actuator limits.
-
-    ``qdot_max`` is per-joint and generous for a small arm; the point is that it
-    is finite, so an unbounded command has a visible consequence.
-    """
+    """Plant-side actuator limits."""
 
     qdot_max: float = 3.0     # rad/s, per joint
 
@@ -113,17 +91,8 @@ def simulate(
 ) -> SimResult:
     """Integrate the closed loop with fixed-step RK4.
 
-    RK4 evaluates the control law four times per step, which treats it as a
-    continuous-time law rather than a zero-order-hold digital controller. That is
-    the plan's choice and it keeps the Python and C++ integrators comparable
-    step-for-step; a ZOH model would be the next refinement if this were driving
-    real hardware at a fixed service rate.
-
-    The saturating clamp makes the closed-loop vector field non-smooth, so RK4's
-    formal fourth-order accuracy does not hold across a saturation boundary. It
-    stays a stable, consistent integrator there, and only the naive controller
-    spends meaningful time saturated -- so this costs accuracy exactly where the
-    trajectory is already a failure case, not in the comparisons that matter.
+    The control law is evaluated at every RK4 stage, which keeps the Python and
+    C++ integrators comparable step for step.
     """
     limits = limits or Limits()
     q = np.asarray(traj.q_start() if q0 is None else q0, dtype=float).copy()
@@ -153,10 +122,7 @@ def simulate(
 
         nonfinite = not bool(np.all(np.isfinite(qdot_cmd)))
         if nonfinite:
-            # A singular J has no inverse, so the naive law has no answer here.
-            # Commanding zero (rather than a large number) is the conservative
-            # reading and keeps the metrics finite; the step is counted and
-            # reported so this never silently flatters the baseline.
+            # A singular J has no inverse: command zero, and count the step.
             qdot_cmd = np.nan_to_num(qdot_cmd, nan=0.0, posinf=lim, neginf=-lim)
 
         qdot_app = np.clip(qdot_cmd, -lim, lim)
@@ -208,20 +174,12 @@ def simulate(
 
 
 def metrics(res: SimResult) -> dict:
-    """The metric set defined once in docs/PLAN.md, computed the same way for every run.
-
-    Position and orientation error are reported separately on purpose: they have
-    different units, and averaging metres against radians into one number would
-    hide which one the damping is actually costing.
-    """
+    """The metric set from docs/PLAN.md, computed the same way for every run."""
     err = res.err
     pos_err = np.linalg.norm(err[:, :2], axis=1)
     ori_err = np.abs(err[:, 2])
 
-    # Smoothness: RMS joint acceleration, finite-differenced from the velocity
-    # the plant actually applied (not the command -- the arm never felt the
-    # clamped part, and differencing a saturated command reports a jerk that
-    # never physically happened).
+    # Smoothness: RMS joint acceleration of the velocity the plant applied.
     if len(res.t) > 1:
         accel = np.diff(res.qdot_applied, axis=0) / res.dt
         accel_rms = float(np.sqrt(np.mean(accel**2)))

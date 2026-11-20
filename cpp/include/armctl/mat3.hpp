@@ -1,7 +1,4 @@
-// Fixed-size 3-vector / 3x3-matrix arithmetic: no allocation, no iteration
-// beyond a fixed unrolled loop, no dependency. This is the Phase 5 constraint
-// from docs/PLAN.md -- the control law has to fit in a 1 ms budget on real
-// hardware, so it stays a fixed instruction sequence throughout.
+// Fixed-size 3-vector and 3x3 matrix arithmetic: no allocation, no dependencies.
 #pragma once
 
 #include <array>
@@ -56,19 +53,14 @@ inline Mat3 matmul(const Mat3& a, const Mat3& b) {
     return out;
 }
 
-// Determinant by cofactor expansion -- matches armsim/controllers.py::det3
-// term for term, so the two stay comparable at the level of individual
-// floating-point operations, not just the final value.
+// Determinant by cofactor expansion, term for term with armsim/controllers.py.
 inline double det3(const Mat3& m) {
     return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
            m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
            m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
 }
 
-// Explicit adjugate inverse. Blows up (to a large but finite value) rather
-// than being guarded when m is singular -- matches
-// armsim/controllers.py::inv3, whose docstring explains why: the naive
-// controller's blow-up *is* the Phase 3 finding, not a bug to catch here.
+// Explicit adjugate inverse, unguarded: the naive law is meant to blow up.
 inline Mat3 inv3(const Mat3& m) {
     const double d = det3(m);
     const Mat3 adj{{

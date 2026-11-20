@@ -6,10 +6,7 @@
 #include "pluginlib/class_list_macros.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-// Vec3 is an alias for std::array<double, 3>, not a distinct class type, so
-// armctl's operator+/operator* aren't found by ADL outside namespace armctl
-// (ADL follows the aliased type's namespace, i.e. std, not armctl). Bring
-// them in explicitly rather than qualifying every infix expression.
+// Vec3 is a std::array alias, so ADL won't find armctl's operators.
 using armctl::operator+;
 using armctl::operator-;
 using armctl::operator*;
@@ -102,8 +99,7 @@ controller_interface::CallbackReturn SingularityController::on_configure(
   qdot_cmd_pub_ =
     std::make_unique<realtime_tools::RealtimePublisher<std_msgs::msg::Float64MultiArray>>(
       qdot_cmd_pub_raw_);
-  // Sized once here so update() only ever assigns into existing storage --
-  // resizing a MultiArray inside the control loop would allocate.
+  // Sized once so update() never allocates.
   qdot_cmd_pub_->msg_.data.resize(3, 0.0);
 
   RCLCPP_INFO(
@@ -156,10 +152,7 @@ controller_interface::return_type SingularityController::update(
 
   const armctl::ControlResult res = compute_command(q, xdot_cmd);
 
-  // Publish the law's raw output first, before the non-finite guard and the
-  // clamp below rewrite it. At an exact singularity the naive inverse can
-  // return inf/nan, and that is the honest thing to report here rather than
-  // the 0.0 the guard substitutes to keep the arm safe.
+  // Publish the raw output before the non-finite guard and clamp rewrite it.
   if (qdot_cmd_pub_ && qdot_cmd_pub_->trylock()) {
     for (std::size_t i = 0; i < 3; ++i) {
       qdot_cmd_pub_->msg_.data[i] = res.qdot[i];

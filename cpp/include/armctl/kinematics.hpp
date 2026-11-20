@@ -1,9 +1,5 @@
-// Forward kinematics, analytical Jacobian, and manipulability for the planar
-// 3R arm -- the direct C++ port of armsim/kinematics.py. Scalar-config and
-// closed-form, same as the Python: no autodiff, no numerical Jacobian.
-//
-// det(J) = l1 * l2 * sin(q2), so the arm is singular exactly at
-// q2 in {0, pi}, independent of q1, q3, and l3. See docs/derivation.md.
+// Forward kinematics, analytical Jacobian and manipulability for the planar
+// 3R arm, ported from armsim/kinematics.py. det(J) = l1 * l2 * sin(q2).
 #pragma once
 
 #include <cmath>
@@ -25,8 +21,7 @@ inline void cumulative_angles(const Vec3& q, double& t1, double& t12, double& t1
     t123 = q[0] + q[1] + q[2];
 }
 
-// End-effector pose [x, y, phi]. phi is unwrapped (the raw sum q1+q2+q3);
-// wrap it into (-pi, pi] at the call site if needed.
+// End-effector pose [x, y, phi], phi unwrapped.
 inline Vec3 forward_kinematics(const RobotArm& arm, const Vec3& q) {
     double t1, t12, t123;
     cumulative_angles(q, t1, t12, t123);
@@ -51,17 +46,12 @@ inline Mat3 jacobian(const RobotArm& arm, const Vec3& q) {
     }};
 }
 
-// Closed-form det(J) = l1 * l2 * sin(q2). Not used by the control laws (they
-// use det3(jacobian(...)) directly, same as the Python), but kept for parity
-// with kinematics.py and for anything that wants the ground truth.
+// Closed-form det(J) = l1 * l2 * sin(q2).
 inline double det_jacobian(const RobotArm& arm, const Vec3& q) {
     return arm.l1 * arm.l2 * std::sin(q[1]);
 }
 
-// Yoshikawa manipulability w = sqrt(det(J J^T)). For a square J this equals
-// |det(J)|, but this goes through the Gram determinant on purpose -- it is
-// only ever used for logging (the w column), never for control, so it is
-// fine that it is not bit-identical to det3(J).
+// Yoshikawa manipulability sqrt(det(J J^T)); used for logging only.
 inline double manipulability(const RobotArm& arm, const Vec3& q) {
     const Mat3 j = jacobian(arm, q);
     const double gram_det = det3(matmul(j, transpose(j)));

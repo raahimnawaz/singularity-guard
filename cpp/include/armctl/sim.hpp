@@ -1,14 +1,6 @@
-// Closed-loop simulation, ported from armsim/sim.py: fixed-step RK4 on
-// qdot = f(t, q), with plant-side saturation and the same nonfinite guard.
-//
-// step_control() is the one control-law evaluation a real 1 kHz digital
-// controller repeats every tick -- forward kinematics, the reference twist,
-// the controller's command, the saturation clamp. simulate() calls it four
-// times per step (RK4's stages) purely for offline-integration accuracy, the
-// same choice armsim/sim.py makes to keep the Python and C++ integrators
-// comparable step-for-step. src/main.cpp times step_control() alone, not the
-// RK4 wrapper, because the 4x evaluation is a simulation artifact, not
-// something real hardware does.
+// Closed-loop simulation ported from armsim/sim.py: fixed-step RK4 with
+// plant-side saturation. step_control() is the single control-law evaluation
+// a real 1 kHz loop would run each tick.
 #pragma once
 
 #include <algorithm>
@@ -56,9 +48,7 @@ inline StepResult step_control(const RobotArm& arm, const ThroughSingularity& tr
         }
     }
     if (nonfinite) {
-        // A singular J has no inverse, so the naive law has no answer here.
-        // Commanding zero (not a huge number) is the conservative reading,
-        // matching armsim/sim.py's np.nan_to_num call.
+        // A singular J has no inverse: command zero, as armsim/sim.py does.
         for (int i = 0; i < 3; ++i) {
             if (std::isnan(cmd[i])) {
                 cmd[i] = 0.0;
@@ -88,9 +78,7 @@ struct StepLog {
     double lam;
 };
 
-// Integrates the closed loop with fixed-step RK4 and calls on_step(StepLog)
-// once per logged sample, in order -- mirroring armsim.sim.simulate()'s
-// per-step logging (q, applied qdot, pose, manipulability, lambda) exactly.
+// RK4 closed loop; calls on_step(StepLog) once per logged sample.
 template <typename Controller, typename OnStep>
 inline void simulate(const RobotArm& arm, const ThroughSingularity& traj, const Controller& ctrl,
                       double dt, double kp, const Limits& limits, OnStep on_step) {

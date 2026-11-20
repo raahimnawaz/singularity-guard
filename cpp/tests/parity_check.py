@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Run the compiled C++ binary and hold its output to the Python golden CSV.
+"""Run the C++ binary and hold its output to the Python golden CSV.
 
 Usage: parity_check.py <binary> <golden_csv>
 
-Stdlib-only (csv, not numpy) on purpose: the whole point of Phase 5 is that
-the port itself pulls in nothing extra, and the CI job that checks it
-shouldn't need a Python dependency install to do that.
+Stdlib only, so the CI check needs no extra install.
 """
 
 from __future__ import annotations

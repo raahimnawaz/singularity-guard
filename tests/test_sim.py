@@ -54,12 +54,7 @@ def test_forward_kinematics_log_is_consistent_with_q():
 
 # --------------------------------------------------------------- the findings
 def test_naive_controller_blows_up_through_the_singularity():
-    """Phase 3's result, pinned so it cannot silently regress.
-
-    The naive inverse is not merely worse here -- it commands joint speeds three
-    orders of magnitude past the actuator limit and spends most of the run
-    saturated.
-    """
+    """Pins the headline: naive commands far past the limit and stays saturated."""
     m = metrics(simulate(ARM, through_singularity(ARM), NaiveInverse(), dt=DT))
     assert m["peak_qdot_cmd"] > 100.0
     assert m["pct_saturated"] > 20.0
@@ -84,12 +79,7 @@ def test_dls_beats_naive_by_orders_of_magnitude_on_peak_velocity():
 
 
 def test_adaptive_costs_nothing_when_well_conditioned():
-    """The reason to prefer adaptive over fixed damping, as a test.
-
-    On a trajectory that never approaches a singularity the schedule holds
-    ``lam = 0``, so adaptive DLS reproduces the naive inverse exactly, while a
-    fixed ``lam`` pays tracking error for protection nothing needed.
-    """
+    """Away from singularities adaptive DLS matches naive exactly; fixed damping does not."""
     traj = well_conditioned(ARM)
     naive = metrics(simulate(ARM, traj, NaiveInverse(), dt=DT))
     fixed = metrics(simulate(ARM, traj, DampedLeastSquares(lam=0.1), dt=DT))

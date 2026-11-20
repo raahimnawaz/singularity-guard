@@ -1,11 +1,5 @@
 // Task-space reference trajectory, ported from armsim/trajectory.py.
-//
-// Only through_singularity is needed here: it is the scenario
-// results/golden_through.csv was generated from, and the one Phase 5 has to
-// hold parity on. See trajectory.py's module docstring for why the reference
-// is a straight line in *task* space with no feasibility guarantee -- that
-// design mistake (and its fix) is one of the more important things this
-// project got right on the second try, and the C++ port inherits the fix.
+// Only through_singularity is needed: it produced results/golden_through.csv.
 #pragma once
 
 #include <algorithm>
@@ -36,9 +30,7 @@ inline void quintic(double tau, double& s, double& ds) {
     ds = 30.0 * tau2 * (1.0 - 2.0 * tau + tau2);
 }
 
-// Straight task-space line through an exactly singular pose at s = 0.5.
-// p(s) = p0 + 2*s*d, dp/ds = 2*d (constant), matching
-// armsim/trajectory.py::through_singularity's closed form.
+// Straight task-space line through a singular pose at s = 0.5.
 struct ThroughSingularity {
     double duration;
     Vec3 q0;
