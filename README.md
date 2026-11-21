@@ -6,6 +6,8 @@
 
 A manipulator controller that sees a kinematic singularity coming and adds just enough damping to keep joint velocities bounded through it, compared against the naive inverse-Jacobian controller that fails there.
 
+> **Used in** [workbench-copilot](https://github.com/raahimnawaz/workbench-copilot), whose SO-101 arm solves its inverse kinematics with the damped-least-squares method studied here.
+
 ![All three control laws across all three scenarios](results/phase4_comparison.png)
 
 ## Results
