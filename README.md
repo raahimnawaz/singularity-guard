@@ -57,8 +57,6 @@ flowchart LR
 
 ## Prior work
 
-Damped least squares is the standard answer to kinematic singularities, and this repo does not claim to invent it. It reimplements the established methods and measures them against each other on a case where the truth is known exactly.
-
 - **Damped least squares:** Nakamura & Hanafusa (1986), Wampler (1986).
 - **Damping scheduled on manipulability:** the form used here follows Nakamura & Hanafusa and Chiaverini (1997).
 - **Related approaches:** numerical filtering (Maciejewski & Klein, 1988) and selectively damped least squares (Buss & Kim, 2005).
